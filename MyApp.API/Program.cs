@@ -1,11 +1,13 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using MyApp.API.Controllers;
 using MyApp.API.Middleware;
 using MyApp.Application.Interfaces;
 using MyApp.Application.Services;
 using MyApp.Infrastructure;
+using MyApp.Infrastructure.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -57,7 +59,7 @@ builder.Services.AddAuthentication(options =>
             {
                 var logger = context.HttpContext.RequestServices
                     .GetRequiredService<ILogger<Program>>();
-                logger.LogWarning("JWT: No access_token cookie found. " +
+                logger.LogDebug("JWT: No access_token cookie found. " +
                     "Cookies present: {Cookies}", 
                     string.Join(", ", context.Request.Cookies.Keys));
             }
@@ -140,7 +142,9 @@ app.UseSwaggerUI(options =>
     options.DocumentTitle = "PublicSpeaking API Documentation";
 });
 
+
 app.UseHttpsRedirection();
+
 
 // Custom exception handling middleware
 app.UseMiddleware<ExceptionHandlingMiddleware>();

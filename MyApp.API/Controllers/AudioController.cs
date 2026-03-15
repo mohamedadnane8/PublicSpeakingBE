@@ -16,7 +16,7 @@ public class AudioController : ControllerBase
 
     private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".mp3", ".wav", ".m4a"
+        ".mp3", ".wav", ".m4a", ".webm", ".ogg"
     };
 
     private static readonly Dictionary<string, HashSet<string>> AllowedContentTypesByExtension =
@@ -39,6 +39,15 @@ public class AudioController : ControllerBase
                 "audio/mp4",
                 "audio/x-m4a",
                 "audio/m4a"
+            },
+            [".webm"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "audio/webm"
+            },
+            [".ogg"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "audio/ogg",
+                "audio/opus"
             }
         };
 
@@ -91,7 +100,7 @@ public class AudioController : ControllerBase
             return BadRequest(new
             {
                 error = "invalid_extension",
-                message = "Only .mp3, .wav, and .m4a files are allowed."
+                message = "Only .mp3, .wav, .m4a, .webm, and .ogg files are allowed."
             });
         }
 
@@ -165,13 +174,15 @@ public class AudioController : ControllerBase
             return false;
         }
 
-        if (!contentType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase))
+        var normalizedContentType = contentType.Split(';', 2)[0].Trim().ToLowerInvariant();
+
+        if (!normalizedContentType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
 
         return AllowedContentTypesByExtension.TryGetValue(extension, out var allowedContentTypes) &&
-               allowedContentTypes.Contains(contentType);
+               allowedContentTypes.Contains(normalizedContentType);
     }
 
     private Guid GetCurrentUserId()
