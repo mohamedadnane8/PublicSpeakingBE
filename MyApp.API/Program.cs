@@ -88,6 +88,20 @@ app.UseHttpsRedirection();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 // Add CORS middleware before authentication
+// Configure allowed origins - supports multiple origins for local development
+var allowedOrigins = new List<string>();
+
+// Add configured frontend URL
+var configuredFrontend = builder.Configuration["Frontend:BaseUrl"];
+if (!string.IsNullOrEmpty(configuredFrontend))
+{
+    allowedOrigins.Add(configuredFrontend);
+}
+
+// Always allow localhost for development (remove in production if needed)
+allowedOrigins.Add("http://localhost:3000");
+allowedOrigins.Add("https://localhost:3000");
+
 app.UseCors(options =>
 {
     var frontendUrl = builder.Configuration["Frontend:BaseUrl"]!;
