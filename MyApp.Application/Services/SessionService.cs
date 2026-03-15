@@ -28,203 +28,209 @@ public class SessionService : ISessionService
 
     private static readonly IReadOnlyDictionary<string, AdviceTemplate> AdviceTemplates =
         new Dictionary<string, AdviceTemplate>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["opening"] = new AdviceTemplate(
-                Label: "opening",
-                Strength:
-                [
-                    "You start with a clear first idea.",
-                    "Your opening gets to the point quickly.",
-                    "You begin in a way that gives the speech direction."
-                ],
-                Improve:
-                [
-                    "Start with a clearer first idea.",
-                    "Use a simple framing sentence to begin.",
-                    "State your angle earlier.",
-                    "Avoid circling before making your point.",
-                    "Open with a concrete thought instead of a vague intro."
-                ],
-                Priority:
-                [
-                    "Your opening needs to become more decisive.",
-                    "Start faster and make the first sentence intentional.",
-                    "Give the listener a clear entry into your answer."
-                ],
-                Polish:
-                [
-                    "Polish the first sentence to sound even more intentional.",
-                    "Keep your opening crisp and reduce filler words.",
-                    "Use a sharper first line to set the tone immediately."
-                ]),
-            ["structure"] = new AdviceTemplate(
-                Label: "structure",
-                Strength:
-                [
-                    "Your answer has a clear shape.",
-                    "Your ideas follow a structure that is easy to track.",
-                    "You organize your points well under time pressure."
-                ],
-                Improve:
-                [
-                    "Organize your answer into two or three points.",
-                    "Use clearer transitions between ideas.",
-                    "Keep each point focused.",
-                    "Move forward instead of circling the same idea.",
-                    "Think in short idea blocks."
-                ],
-                Priority:
-                [
-                    "Structure should be your main focus next round.",
-                    "Give your answer a simple backbone: point, example, takeaway.",
-                    "Reduce the number of ideas and organize them more clearly."
-                ],
-                Polish:
-                [
-                    "Polish transitions so each point connects smoothly.",
-                    "Make your structure feel lighter by keeping points shorter.",
-                    "Tighten the flow between opening, body, and ending."
-                ]),
-            ["ending"] = new AdviceTemplate(
-                Label: "ending",
-                Strength:
-                [
-                    "You close with a clear finish.",
-                    "Your ending gives a good sense of completion.",
-                    "You wrap up your answer in a controlled way."
-                ],
-                Improve:
-                [
-                    "End with one concise takeaway.",
-                    "Reserve a final sentence to close intentionally.",
-                    "Avoid stopping abruptly; land your final point.",
-                    "Repeat your core message briefly at the end.",
-                    "Finish with a stronger closing line."
-                ],
-                Priority:
-                [
-                    "Your ending needs a clearer final takeaway.",
-                    "Prioritize a deliberate closing sentence.",
-                    "Make your last line memorable and direct."
-                ],
-                Polish:
-                [
-                    "Polish your final line so it lands with more impact.",
-                    "Make the ending shorter and more memorable.",
-                    "Close with a cleaner callout of your main idea."
-                ]),
-            ["confidence"] = new AdviceTemplate(
-                Label: "confidence",
-                Strength:
-                [
-                    "You sound composed and assured.",
-                    "Your delivery projects confidence.",
-                    "You keep control of your pace and tone."
-                ],
-                Improve:
-                [
-                    "Slow down slightly to sound more in control.",
-                    "Use fewer fillers to reinforce confidence.",
-                    "Keep your voice steady through key points.",
-                    "Pause briefly before important sentences.",
-                    "Commit to your wording instead of softening statements."
-                ],
-                Priority:
-                [
-                    "Confidence is the main area to strengthen next.",
-                    "Prioritize a calmer pace and stronger vocal intent.",
-                    "Reduce hesitation and own each sentence."
-                ],
-                Polish:
-                [
-                    "Polish confidence by adding cleaner pauses.",
-                    "Keep your tone steady from start to finish.",
-                    "Sharpen delivery by removing soft qualifiers."
-                ]),
-            ["clarity"] = new AdviceTemplate(
-                Label: "clarity",
-                Strength:
-                [
-                    "Your message is easy to follow.",
-                    "You explain ideas in a clear and direct way.",
-                    "Your wording helps the listener understand quickly."
-                ],
-                Improve:
-                [
-                    "Use shorter sentences for key ideas.",
-                    "Replace vague terms with concrete wording.",
-                    "Keep one main idea per sentence.",
-                    "Remove extra details that dilute the point.",
-                    "State your point before giving examples."
-                ],
-                Priority:
-                [
-                    "Clarity should be your top priority next round.",
-                    "Prioritize simple phrasing and shorter idea blocks.",
-                    "Focus on one clear message at a time."
-                ],
-                Polish:
-                [
-                    "Polish clarity by tightening long sentences.",
-                    "Keep your best points and trim secondary details.",
-                    "Make wording sharper and more concrete."
-                ]),
-            ["authenticity"] = new AdviceTemplate(
-                Label: "authenticity",
-                Strength:
-                [
-                    "You sound natural and genuine.",
-                    "Your speaking style feels authentic.",
-                    "You communicate with a personal, credible tone."
-                ],
-                Improve:
-                [
-                    "Use more natural phrasing that sounds like you.",
-                    "Add one personal angle to ground your point.",
-                    "Avoid sounding overly scripted.",
-                    "Let your own perspective come through earlier.",
-                    "Keep your tone conversational and specific."
-                ],
-                Priority:
-                [
-                    "Authenticity needs focused work next round.",
-                    "Prioritize sounding more personal and less generic.",
-                    "Bring your own perspective into the answer sooner."
-                ],
-                Polish:
-                [
-                    "Polish authenticity by adding one concrete personal detail.",
-                    "Keep your natural voice and reduce formal phrasing.",
-                    "Make your perspective more explicit in key moments."
-                ]),
-            ["languageExpression"] = new AdviceTemplate(
-                Label: "language expression",
-                Strength:
-                [
-                    "Your language is expressive and engaging.",
-                    "You choose words that add energy to your message.",
-                    "Your phrasing gives your speech presence."
-                ],
-                Improve:
-                [
-                    "Use more precise vocabulary for key ideas.",
-                    "Vary sentence rhythm to keep the speech dynamic.",
-                    "Replace repeated words with sharper alternatives.",
-                    "Use simpler phrasing when ideas get dense.",
-                    "Balance expressive language with clarity."
-                ],
-                Priority:
-                [
-                    "Language expression should be a priority next round.",
-                    "Prioritize precision and variety in wording.",
-                    "Work on expressive but concise phrasing."
-                ],
-                Polish:
-                [
-                    "Polish expression with stronger word variety.",
-                    "Keep language vivid while staying concise.",
-                    "Refine key phrases to sound more intentional."
-                ])
+{
+    ["opening"] = new AdviceTemplate(
+        Label: "opening",
+        Strength:
+        [
+            "You begin with a clear first idea.",
+            "Your opening moves quickly to the point.",
+            "You start in a way that sets direction for the answer."
+        ],
+        Improve:
+        [
+            "Start with a clearer first idea instead of circling the topic.",
+            "Use a short framing sentence to anchor the beginning.",
+            "State your angle earlier so the listener knows your direction.",
+            "Open with a concrete thought rather than a vague introduction.",
+            "Begin with a simple statement that leads into your main point."
+        ],
+        Priority:
+        [
+            "Your opening needs a clearer first idea.",
+            "Start faster and make the first sentence decisive.",
+            "Give the listener a strong entry into your answer."
+        ],
+        Polish:
+        [
+            "Make the first sentence even sharper.",
+            "Reduce filler words in the opening.",
+            "Land the opening line with more intent."
+        ]),
+
+    ["structure"] = new AdviceTemplate(
+        Label: "structure",
+        Strength:
+        [
+            "Your answer follows a structure that is easy to track.",
+            "Your ideas move in a clear sequence.",
+            "You organize your points well under time pressure."
+        ],
+        Improve:
+        [
+            "Use a simple structure with two or three clear points.",
+            "Signal your structure early (for example: 'two things come to mind').",
+            "Keep each point focused before moving to the next.",
+            "Use clearer transitions between ideas.",
+            "Move forward through ideas instead of returning to the same one."
+        ],
+        Priority:
+        [
+            "Structure should be the main focus next round.",
+            "Use a simple framework like point–example–takeaway.",
+            "Try a clear pattern such as past–present–future or problem–solution."
+        ],
+        Polish:
+        [
+            "Make transitions between points smoother.",
+            "Keep your points shorter so the structure stays visible.",
+            "Tighten the flow from opening to conclusion."
+        ]),
+
+    ["ending"] = new AdviceTemplate(
+        Label: "ending",
+        Strength:
+        [
+            "You finish with a clear closing thought.",
+            "Your answer ends with a sense of completion.",
+            "You close the response in a controlled way."
+        ],
+        Improve:
+        [
+            "End with one concise takeaway.",
+            "Signal the ending with a short summary sentence.",
+            "Avoid introducing new ideas at the very end.",
+            "Restate the core message briefly before finishing.",
+            "Finish with a clear final sentence instead of fading out."
+        ],
+        Priority:
+        [
+            "Focus on ending your answer more clearly.",
+            "Prioritize a deliberate final sentence.",
+            "Make the closing idea simple and direct."
+        ],
+        Polish:
+        [
+            "Make the final sentence slightly shorter and sharper.",
+            "Let the last idea land before stopping.",
+            "Close by reinforcing the main message."
+        ]),
+
+    ["confidence"] = new AdviceTemplate(
+        Label: "confidence",
+        Strength:
+        [
+            "Your delivery sounds composed.",
+            "You speak with steady control.",
+            "Your tone projects confidence."
+        ],
+        Improve:
+        [
+            "Slow down slightly to sound more deliberate.",
+            "Replace filler words with brief pauses.",
+            "Keep your voice steady through key points.",
+            "Pause briefly before important ideas.",
+            "Finish sentences confidently instead of softening them."
+        ],
+        Priority:
+        [
+            "Confidence is the main area to strengthen next.",
+            "Focus on a calmer pace and steadier delivery.",
+            "Reduce hesitation and commit to each sentence."
+        ],
+        Polish:
+        [
+            "Add cleaner pauses between ideas.",
+            "Keep the tone steady from start to finish.",
+            "Deliver key sentences with more intent."
+        ]),
+
+    ["clarity"] = new AdviceTemplate(
+        Label: "clarity",
+        Strength:
+        [
+            "Your ideas are easy to follow.",
+            "You explain your points clearly.",
+            "Your message comes across directly."
+        ],
+        Improve:
+        [
+            "Use shorter sentences for key ideas.",
+            "State the main point before explaining it.",
+            "Keep one idea per sentence.",
+            "Remove details that distract from the main point.",
+            "Use concrete examples to clarify your idea."
+        ],
+        Priority:
+        [
+            "Clarity should be your main focus next round.",
+            "Simplify sentences so the main idea stands out.",
+            "Focus on expressing one idea clearly at a time."
+        ],
+        Polish:
+        [
+            "Tighten longer sentences slightly.",
+            "Keep the strongest ideas and trim extra detail.",
+            "Make key statements more concise."
+        ]),
+
+    ["authenticity"] = new AdviceTemplate(
+        Label: "authenticity",
+        Strength:
+        [
+            "Your delivery feels natural.",
+            "Your voice sounds genuine.",
+            "You communicate with a personal tone."
+        ],
+        Improve:
+        [
+            "Use phrasing that feels more natural to you.",
+            "Let your perspective appear earlier in the answer.",
+            "Avoid overly formal wording.",
+            "Explain the idea as you would in conversation.",
+            "Let your tone stay relaxed and direct."
+        ],
+        Priority:
+        [
+            "Focus on sounding more natural in your delivery.",
+            "Bring your personal perspective into the answer sooner.",
+            "Keep your tone conversational and direct."
+        ],
+        Polish:
+        [
+            "Add one concrete personal angle when relevant.",
+            "Reduce formal phrasing slightly.",
+            "Make your perspective clearer in key moments."
+        ]),
+
+    ["languageExpression"] = new AdviceTemplate(
+        Label: "language expression",
+        Strength:
+        [
+            "Your language keeps the answer engaging.",
+            "Your phrasing adds energy to your message.",
+            "Your wording supports your ideas well."
+        ],
+        Improve:
+        [
+            "Use more precise wording for key ideas.",
+            "Vary sentence rhythm to keep the speech dynamic.",
+            "Avoid repeating the same phrasing too often.",
+            "Use simpler wording when ideas become dense.",
+            "Connect ideas with clearer transitions."
+        ],
+        Priority:
+        [
+            "Focus on clearer and more varied phrasing.",
+            "Prioritize precise wording for important ideas.",
+            "Work on making key sentences more expressive."
+        ],
+        Polish:
+        [
+            "Refine wording so key phrases sound sharper.",
+            "Keep language vivid while staying concise.",
+            "Use slightly more variation in phrasing."
+        ])
         };
 
     private readonly ISessionRepository _sessionRepository;
