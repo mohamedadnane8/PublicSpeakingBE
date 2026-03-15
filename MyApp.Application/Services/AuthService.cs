@@ -268,6 +268,8 @@ public class AuthService : IAuthService
         string? userAgent,
         CancellationToken cancellationToken = default)
     {
+        var now = DateTime.UtcNow;
+
         // Step 1: Get session from database
         var session = await _sessionRepository.GetByIdAsync(sessionId, cancellationToken);
         if (session == null)
@@ -278,15 +280,25 @@ public class AuthService : IAuthService
         // Step 2: Verify refresh token
         if (!session.ValidateRefreshToken(_tokenService.HashRefreshToken(refreshToken)))
         {
+            // Concurrent refresh requests can reuse the previous token briefly.
+            // In that case, ask client to retry with the newly rotated cookie.
+            if (session.IsActive &&
+                session.LastRotatedAt.HasValue &&
+                now - session.LastRotatedAt.Value < TimeSpan.FromSeconds(30))
+            {
+                throw new DomainException("Refresh already rotated. Please retry.");
+            }
+
             // Potential token reuse attack - revoke all sessions for this user
             await _sessionRepository.RevokeAllUserSessionsAsync(session.UserId, cancellationToken);
+            await _sessionRepository.SaveChangesAsync(cancellationToken);
             throw new DomainException("Invalid refresh token. All sessions have been revoked for security.");
         }
 
         // Step 3: Rotate refresh token (security best practice)
         var newRefreshToken = _tokenService.GenerateRefreshToken();
         var newRefreshTokenHash = _tokenService.HashRefreshToken(newRefreshToken);
-        var newExpiresAt = DateTime.UtcNow.Add(_tokenService.RefreshTokenLifetime);
+        var newExpiresAt = now.Add(_tokenService.RefreshTokenLifetime);
 
         session.RotateToken(newRefreshTokenHash, newExpiresAt);
         await _sessionRepository.UpdateAsync(session, cancellationToken);
@@ -300,7 +312,7 @@ public class AuthService : IAuthService
             AccessToken = accessToken,
             RefreshToken = newRefreshToken,
             SessionId = session.Id,
-            AccessTokenExpiresAt = DateTime.UtcNow.Add(_tokenService.AccessTokenLifetime),
+            AccessTokenExpiresAt = now.Add(_tokenService.AccessTokenLifetime),
             RefreshTokenExpiresAt = newExpiresAt,
             User = MapToUserInfoResponse(session.User)
         };

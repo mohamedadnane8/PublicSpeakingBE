@@ -307,6 +307,18 @@ public class AuthController : ControllerBase
         catch (DomainException ex)
         {
             _logger.LogWarning(ex, "Token refresh failed for session: {SessionId}", sessionId);
+
+            // Parallel refresh requests can hit rotated token race.
+            // Do not clear valid cookies in this case; client should retry once.
+            if (string.Equals(ex.Message, "Refresh already rotated. Please retry.", StringComparison.Ordinal))
+            {
+                return StatusCode(StatusCodes.Status409Conflict, new AuthOperationResponse
+                {
+                    Success = false,
+                    Message = ex.Message
+                });
+            }
+
             ClearAuthenticationCookies();
             return Unauthorized(new AuthOperationResponse
             {
