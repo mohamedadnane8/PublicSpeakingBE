@@ -86,4 +86,9 @@ public class AuthOperationResponse
     public bool Success { get; set; }
     public string? Message { get; set; }
     public string? RedirectUri { get; set; }
+    
+    /// <summary>
+    /// Debug information for troubleshooting (only populated in development)
+    /// </summary>
+    public object? DebugInfo { get; set; }
 }

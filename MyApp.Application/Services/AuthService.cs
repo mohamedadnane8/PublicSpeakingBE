@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using MyApp.Application.DTOs;
 using MyApp.Application.Interfaces;
 using MyApp.Domain.Entities;
@@ -16,6 +17,7 @@ public class AuthService : IAuthService
     private readonly IGoogleTokenValidator _googleTokenValidator;
     private readonly ITokenService _tokenService;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ILogger<AuthService> _logger;
     private readonly string _googleClientId;
     private readonly string _googleClientSecret;
     private readonly string _googleRedirectUri;
@@ -26,13 +28,15 @@ public class AuthService : IAuthService
         IGoogleTokenValidator googleTokenValidator,
         ITokenService tokenService,
         IHttpClientFactory httpClientFactory,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        ILogger<AuthService> logger)
     {
         _userRepository = userRepository;
         _sessionRepository = sessionRepository;
         _googleTokenValidator = googleTokenValidator;
         _tokenService = tokenService;
         _httpClientFactory = httpClientFactory;
+        _logger = logger;
 
         var googleSettings = configuration.GetSection("GoogleOAuth");
         _googleClientId = googleSettings["ClientId"]!;
@@ -224,21 +228,36 @@ public class AuthService : IAuthService
         string accessToken,
         CancellationToken cancellationToken = default)
     {
+        _logger.LogDebug("GetCurrentUserAsync: Starting validation for token (length: {Length})", 
+            accessToken.Length);
+
         // Validate token
         var principal = _tokenService.ValidateAccessToken(accessToken);
         if (principal == null)
+        {
+            _logger.LogWarning("GetCurrentUserAsync: Token validation failed");
             return null;
+        }
 
         // Get user ID from token
         var userId = _tokenService.GetUserIdFromToken(accessToken);
         if (!userId.HasValue)
+        {
+            _logger.LogWarning("GetCurrentUserAsync: Could not extract user ID from token");
             return null;
+        }
+
+        _logger.LogDebug("GetCurrentUserAsync: Looking up user {UserId}", userId.Value);
 
         // Get user from database
         var user = await _userRepository.GetByIdAsync(userId.Value, cancellationToken);
         if (user == null)
+        {
+            _logger.LogWarning("GetCurrentUserAsync: User {UserId} not found in database", userId.Value);
             return null;
+        }
 
+        _logger.LogDebug("GetCurrentUserAsync: User found - {Email}", user.Email);
         return MapToUserInfoResponse(user);
     }
 

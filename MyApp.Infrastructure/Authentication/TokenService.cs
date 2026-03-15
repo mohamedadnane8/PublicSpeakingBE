@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using MyApp.Application.Interfaces;
 using MyApp.Domain.Entities;
@@ -12,6 +13,7 @@ namespace MyApp.Infrastructure.Authentication;
 public class TokenService : ITokenService
 {
     private readonly IConfiguration _configuration;
+    private readonly ILogger<TokenService> _logger;
     private readonly string _secretKey;
     private readonly string _issuer;
     private readonly string _audience;
@@ -19,9 +21,10 @@ public class TokenService : ITokenService
     private readonly int _refreshTokenExpiryDays;
     private readonly bool _isProduction;
 
-    public TokenService(IConfiguration configuration)
+    public TokenService(IConfiguration configuration, ILogger<TokenService> logger)
     {
         _configuration = configuration;
+        _logger = logger;
         
         var jwtSettings = configuration.GetSection("Jwt");
         _secretKey = jwtSettings["SecretKey"]!;
@@ -87,17 +90,57 @@ public class TokenService : ITokenService
                 ClockSkew = TimeSpan.FromMinutes(1)
             };
 
-            var principal = tokenHandler.ValidateToken(accessToken, validationParameters, out _);
+            var principal = tokenHandler.ValidateToken(accessToken, validationParameters, out var validatedToken);
+            
+            var jwtToken = validatedToken as JwtSecurityToken;
+            _logger.LogDebug("Token validation: Token parsed successfully. " +
+                "Issuer: {Issuer}, Audience: {Audience}, Expires: {Expires}",
+                jwtToken?.Issuer,
+                jwtToken?.Audiences.FirstOrDefault(),
+                jwtToken?.ValidTo);
             
             // Additional validation: ensure it's an access token
             var tokenType = principal.FindFirst("type")?.Value;
             if (tokenType != "access")
+            {
+                _logger.LogWarning("Token validation FAILED: Token type is '{TokenType}', expected 'access'", 
+                    tokenType);
                 return null;
+            }
+
+            _logger.LogDebug("Token validation SUCCESS for user {UserId}", 
+                principal.FindFirst(JwtRegisteredClaimNames.Sub)?.Value);
 
             return principal;
         }
-        catch
+        catch (SecurityTokenExpiredException ex)
         {
+            _logger.LogWarning("Token validation FAILED: Token has expired at {Expiry}", 
+                ex.Expires);
+            return null;
+        }
+        catch (SecurityTokenInvalidIssuerException ex)
+        {
+            _logger.LogWarning("Token validation FAILED: Invalid issuer. Expected: {Expected}, Got: {Actual}",
+                _issuer, ex.Message);
+            return null;
+        }
+        catch (SecurityTokenInvalidAudienceException ex)
+        {
+            _logger.LogWarning("Token validation FAILED: Invalid audience. Expected: {Expected}, Got: {Actual}",
+                _audience, ex.Message);
+            return null;
+        }
+        catch (SecurityTokenInvalidSignatureException)
+        {
+            _logger.LogWarning("Token validation FAILED: Invalid signature. " +
+                "This usually means the JWT secret has changed or the token was tampered with.");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Token validation FAILED: Unexpected error - {ErrorType}", 
+                ex.GetType().Name);
             return null;
         }
     }
@@ -111,8 +154,9 @@ public class TokenService : ITokenService
             var subClaim = token.Claims.FirstOrDefault(c => c.Type == JwtRegisteredClaimNames.Sub)?.Value;
             return subClaim != null && Guid.TryParse(subClaim, out var userId) ? userId : null;
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogWarning(ex, "Failed to extract user ID from token");
             return null;
         }
     }
@@ -126,8 +170,9 @@ public class TokenService : ITokenService
             var sessionClaim = token.Claims.FirstOrDefault(c => c.Type == "session_id")?.Value;
             return sessionClaim != null && Guid.TryParse(sessionClaim, out var sessionId) ? sessionId : null;
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogWarning(ex, "Failed to extract session ID from token");
             return null;
         }
     }

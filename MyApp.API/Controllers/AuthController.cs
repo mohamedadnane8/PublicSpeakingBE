@@ -191,18 +191,46 @@ public class AuthController : ControllerBase
     {
         var accessToken = Request.Cookies[AccessTokenCookie];
         
+        _logger.LogDebug("GetCurrentUser called. Cookie present: {HasCookie}", 
+            !string.IsNullOrEmpty(accessToken));
+
         if (string.IsNullOrEmpty(accessToken))
         {
-            return Unauthorized(new { error = "missing_token", message = "Access token not found" });
+            _logger.LogWarning("GetCurrentUser 401: access_token cookie is missing. " +
+                "Cookies received: {Cookies}", 
+                string.Join(", ", Request.Cookies.Keys));
+            
+            return Unauthorized(new { 
+                error = "missing_token", 
+                message = "Access token not found in cookies",
+                debug = new {
+                    cookiesReceived = Request.Cookies.Keys.ToList(),
+                    hint = "Make sure your frontend sends cookies with 'credentials: include'"
+                }
+            });
         }
 
+        _logger.LogDebug("GetCurrentUser: Validating token...");
         var user = await _authService.GetCurrentUserAsync(accessToken, cancellationToken);
         
         if (user == null)
         {
-            return Unauthorized(new { error = "invalid_token", message = "Invalid or expired token" });
+            _logger.LogWarning("GetCurrentUser 401: Token validation failed or user not found. " +
+                "Token starts with: {TokenPrefix}", 
+                accessToken[..Math.Min(20, accessToken.Length)] + "...");
+            
+            return Unauthorized(new { 
+                error = "invalid_token", 
+                message = "Invalid or expired token",
+                debug = new {
+                    tokenPresent = true,
+                    tokenLength = accessToken.Length,
+                    suggestion = "Token may be expired. Try calling /api/auth/refresh"
+                }
+            });
         }
 
+        _logger.LogDebug("GetCurrentUser: User authenticated - {Email}", user.Email);
         return Ok(user);
     }
 
@@ -218,18 +246,36 @@ public class AuthController : ControllerBase
         var refreshToken = Request.Cookies[RefreshTokenCookie];
         var sessionIdCookie = Request.Cookies[SessionIdCookie];
 
+        _logger.LogDebug("RefreshToken called. refresh_token present: {HasRefresh}, session_id present: {HasSession}",
+            !string.IsNullOrEmpty(refreshToken), !string.IsNullOrEmpty(sessionIdCookie));
+
         if (string.IsNullOrEmpty(refreshToken) || string.IsNullOrEmpty(sessionIdCookie))
         {
+            _logger.LogWarning("RefreshToken 401: Missing cookies. " +
+                "refresh_token: {HasRefresh}, session_id: {HasSession}. " +
+                "All cookies: {Cookies}",
+                !string.IsNullOrEmpty(refreshToken), 
+                !string.IsNullOrEmpty(sessionIdCookie),
+                string.Join(", ", Request.Cookies.Keys));
+            
             ClearAuthenticationCookies();
             return Unauthorized(new AuthOperationResponse
             {
                 Success = false,
-                Message = "Refresh token not found"
+                Message = "Refresh token not found",
+                DebugInfo = new {
+                    refreshTokenPresent = !string.IsNullOrEmpty(refreshToken),
+                    sessionIdPresent = !string.IsNullOrEmpty(sessionIdCookie),
+                    hint = "Make sure your frontend sends cookies with 'credentials: include'"
+                }
             });
         }
 
         if (!Guid.TryParse(sessionIdCookie, out var sessionId))
         {
+            _logger.LogWarning("RefreshToken 401: Invalid session_id format: {SessionId}", 
+                sessionIdCookie[..Math.Min(20, sessionIdCookie.Length)]);
+            
             ClearAuthenticationCookies();
             return Unauthorized(new AuthOperationResponse
             {

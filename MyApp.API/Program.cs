@@ -45,10 +45,64 @@ builder.Services.AddAuthentication(options =>
         OnMessageReceived = context =>
         {
             // Try to get the token from the access_token cookie
-            if (context.Request.Cookies.ContainsKey("access_token"))
+            if (context.Request.Cookies.TryGetValue("access_token", out var token))
             {
-                context.Token = context.Request.Cookies["access_token"];
+                context.Token = token;
+                
+                var logger = context.HttpContext.RequestServices
+                    .GetRequiredService<ILogger<Program>>();
+                logger.LogDebug("JWT: Token read from cookie (length: {Length})", token.Length);
             }
+            else
+            {
+                var logger = context.HttpContext.RequestServices
+                    .GetRequiredService<ILogger<Program>>();
+                logger.LogWarning("JWT: No access_token cookie found. " +
+                    "Cookies present: {Cookies}", 
+                    string.Join(", ", context.Request.Cookies.Keys));
+            }
+            
+            return Task.CompletedTask;
+        },
+        
+        OnAuthenticationFailed = context =>
+        {
+            var logger = context.HttpContext.RequestServices
+                .GetRequiredService<ILogger<Program>>();
+            
+            logger.LogError(context.Exception, 
+                "JWT Authentication FAILED: {ErrorType} - {Message}. " +
+                "Token present: {HasToken}",
+                context.Exception.GetType().Name,
+                context.Exception.Message,
+                !string.IsNullOrEmpty(context.Request.Cookies["access_token"]));
+            
+            return Task.CompletedTask;
+        },
+        
+        OnTokenValidated = context =>
+        {
+            var logger = context.HttpContext.RequestServices
+                .GetRequiredService<ILogger<Program>>();
+            
+            var userId = context.Principal?.FindFirst("sub")?.Value ?? "unknown";
+            logger.LogDebug("JWT: Token validated successfully for user {UserId}", userId);
+            
+            return Task.CompletedTask;
+        },
+        
+        OnChallenge = context =>
+        {
+            var logger = context.HttpContext.RequestServices
+                .GetRequiredService<ILogger<Program>>();
+            
+            logger.LogWarning("JWT Challenge triggered. Error: {Error}. " +
+                "Description: {Description}. " +
+                "Path: {Path}",
+                context.Error,
+                context.ErrorDescription,
+                context.Request.Path);
+            
             return Task.CompletedTask;
         }
     };
@@ -76,11 +130,14 @@ builder.Services.AddScoped<ISessionService, SessionService>();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline
-if (app.Environment.IsDevelopment())
+// Enable Swagger in all environments
+app.UseSwagger();
+app.UseSwaggerUI(options =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+    options.SwaggerEndpoint("/swagger/v1/swagger.json", "PublicSpeaking API v1");
+    options.RoutePrefix = "swagger";
+    options.DocumentTitle = "PublicSpeaking API Documentation";
+});
 
 app.UseHttpsRedirection();
 
@@ -102,10 +159,12 @@ if (!string.IsNullOrEmpty(configuredFrontend))
 allowedOrigins.Add("http://localhost:3000");
 allowedOrigins.Add("https://localhost:3000");
 
+var logger = app.Services.GetRequiredService<ILogger<Program>>();
+logger.LogInformation("CORS configured with origins: {Origins}", string.Join(", ", allowedOrigins));
+
 app.UseCors(options =>
 {
-    var frontendUrl = builder.Configuration["Frontend:BaseUrl"]!;
-    options.WithOrigins(frontendUrl)
+    options.WithOrigins(allowedOrigins.ToArray())
            .AllowCredentials()  // Required for cookies
            .AllowAnyHeader()
            .AllowAnyMethod();
