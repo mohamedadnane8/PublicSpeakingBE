@@ -37,7 +37,8 @@ public class ApplicationDbContext : DbContext
             
             entity.Property(e => e.Email).HasMaxLength(256).IsRequired();
             entity.Property(e => e.FirstName).HasMaxLength(100).IsRequired();
-            entity.Property(e => e.LastName).HasMaxLength(100).IsRequired();
+            // LastName is optional - OAuth providers may not provide it
+            entity.Property(e => e.LastName).HasMaxLength(100);
             entity.Property(e => e.GoogleId).HasMaxLength(100).IsRequired();
             entity.Property(e => e.ProfilePictureUrl).HasMaxLength(500);
         });

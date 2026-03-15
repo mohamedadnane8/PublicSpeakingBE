@@ -52,6 +52,10 @@ docker image prune -f
 echo -e "${GREEN}Building and starting containers...${NC}"
 $COMPOSE_CMD up -d --build
 
+# Run database migrations
+echo -e "${GREEN}Running database migrations...${NC}"
+$COMPOSE_CMD exec -T api dotnet ef database update --project MyApp.Infrastructure --startup-project MyApp.API || echo "Migration skipped or failed"
+
 echo -e "${GREEN}Current status:${NC}"
 $COMPOSE_CMD ps
 
