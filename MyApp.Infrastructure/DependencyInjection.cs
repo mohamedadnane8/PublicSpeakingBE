@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Amazon;
+using Amazon.Runtime;
 using Amazon.S3;
 using MyApp.Application.Interfaces;
 using MyApp.Domain.Entities;
@@ -44,6 +45,25 @@ public static class DependencyInjection
             }
 
             var region = RegionEndpoint.GetBySystemName(options.Region);
+            var hasStaticCredentials =
+                !string.IsNullOrWhiteSpace(options.AccessKeyId) &&
+                !string.IsNullOrWhiteSpace(options.SecretAccessKey);
+
+            if (hasStaticCredentials)
+            {
+                AWSCredentials credentials;
+                if (string.IsNullOrWhiteSpace(options.SessionToken))
+                {
+                    credentials = new BasicAWSCredentials(options.AccessKeyId!, options.SecretAccessKey!);
+                }
+                else
+                {
+                    credentials = new SessionAWSCredentials(options.AccessKeyId!, options.SecretAccessKey!, options.SessionToken!);
+                }
+
+                return new AmazonS3Client(credentials, region);
+            }
+
             return new AmazonS3Client(region);
         });
         services.AddScoped<IS3StorageService, S3StorageService>();
