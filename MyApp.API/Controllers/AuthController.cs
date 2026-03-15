@@ -300,7 +300,8 @@ public class AuthController : ControllerBase
             return Ok(new AuthOperationResponse
             {
                 Success = true,
-                Message = "Token refreshed successfully"
+                Message = "Token refreshed successfully",
+                AccessToken = authResult.AccessToken
             });
         }
         catch (DomainException ex)

@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
@@ -20,6 +21,8 @@ public class TokenService : ITokenService
     private readonly int _accessTokenExpiryMinutes;
     private readonly int _refreshTokenExpiryDays;
     private readonly bool _isProduction;
+    private readonly bool _cookieSecure;
+    private readonly string _cookieSameSite;
 
     public TokenService(IConfiguration configuration, ILogger<TokenService> logger)
     {
@@ -36,6 +39,28 @@ public class TokenService : ITokenService
             configuration["ASPNETCORE_ENVIRONMENT"], 
             "Development", 
             StringComparison.OrdinalIgnoreCase);
+
+        // Cookie policy can be overridden per environment via configuration.
+        // Defaults remain secure: SameSite=Strict and Secure in production only.
+        _cookieSecure = bool.TryParse(configuration["AuthCookies:Secure"], out var secureOverride)
+            ? secureOverride
+            : _isProduction;
+
+        var configuredSameSite = configuration["AuthCookies:SameSite"]?.Trim();
+        _cookieSameSite = NormalizeSameSite(configuredSameSite, logger);
+
+        // Browsers require Secure=true when SameSite=None.
+        if (_cookieSameSite == SameSiteMode.None.ToString() && !_cookieSecure)
+        {
+            _logger.LogWarning("AuthCookies:SameSite=None requires Secure cookies. Forcing Secure=true.");
+            _cookieSecure = true;
+        }
+
+        _logger.LogInformation(
+            "Auth cookie policy: SameSite={SameSite}, Secure={Secure}, Environment={Environment}",
+            _cookieSameSite,
+            _cookieSecure,
+            configuration["ASPNETCORE_ENVIRONMENT"] ?? "Unknown");
     }
 
     public TimeSpan AccessTokenLifetime => TimeSpan.FromMinutes(_accessTokenExpiryMinutes);
@@ -213,8 +238,8 @@ public class TokenService : ITokenService
         return new TokenCookieOptions
         {
             HttpOnly = true,
-            Secure = _isProduction,  // Only HTTPS in production
-            SameSite = "Strict",
+            Secure = _cookieSecure,
+            SameSite = _cookieSameSite,
             Path = "/api",  // Only sent to API routes
             MaxAgeMinutes = _accessTokenExpiryMinutes,
         };
@@ -225,8 +250,8 @@ public class TokenService : ITokenService
         return new TokenCookieOptions
         {
             HttpOnly = true,
-            Secure = _isProduction,
-            SameSite = "Strict",
+            Secure = _cookieSecure,
+            SameSite = _cookieSameSite,
             Path = "/api/auth/refresh",  // Only sent to refresh endpoint
             MaxAgeMinutes = _refreshTokenExpiryDays * 24 * 60,
         };
@@ -237,8 +262,8 @@ public class TokenService : ITokenService
         return new TokenCookieOptions
         {
             HttpOnly = true,
-            Secure = _isProduction,
-            SameSite = "Strict",
+            Secure = _cookieSecure,
+            SameSite = _cookieSameSite,
             Path = "/",
             MaxAgeMinutes = _refreshTokenExpiryDays * 24 * 60,
         };
@@ -249,7 +274,7 @@ public class TokenService : ITokenService
         return new TokenCookieOptions
         {
             HttpOnly = true,
-            Secure = _isProduction,
+            Secure = _cookieSecure,
             SameSite = "Lax",  // Lax for OAuth redirects
             Path = "/api/auth",
             MaxAgeMinutes = 10,
@@ -261,10 +286,28 @@ public class TokenService : ITokenService
         return new TokenCookieOptions
         {
             HttpOnly = true,
-            Secure = _isProduction,
-            SameSite = "Strict",
+            Secure = _cookieSecure,
+            SameSite = _cookieSameSite,
             Path = path,
             MaxAgeMinutes = 0  // Expire immediately
         };
+    }
+
+    private static string NormalizeSameSite(string? configuredSameSite, ILogger logger)
+    {
+        if (string.IsNullOrWhiteSpace(configuredSameSite))
+        {
+            return SameSiteMode.Strict.ToString();
+        }
+
+        if (Enum.TryParse<SameSiteMode>(configuredSameSite, true, out var mode))
+        {
+            return mode.ToString();
+        }
+
+        logger.LogWarning(
+            "Invalid AuthCookies:SameSite value '{Value}'. Falling back to Strict.",
+            configuredSameSite);
+        return SameSiteMode.Strict.ToString();
     }
 }
