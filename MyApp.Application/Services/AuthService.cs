@@ -128,36 +128,42 @@ public class AuthService : IAuthService
             throw new InvalidGoogleTokenException("Email not verified with Google");
         }
 
-        // Step 3: Find or create user
-        var user = await _userRepository.GetByGoogleIdAsync(googleUserInfo.GoogleId, cancellationToken)
-            ?? await _userRepository.GetByEmailAsync(googleUserInfo.Email, cancellationToken);
+        // Step 3: Safely extract name fields from Google profile
+        // Google may not provide all name fields depending on user's privacy settings
+        var (email, firstName, lastName, googleId, profilePicture) = ExtractGoogleProfileSafely(googleUserInfo);
+
+        // Step 4: Find or create user
+        var user = await _userRepository.GetByGoogleIdAsync(googleId, cancellationToken)
+            ?? await _userRepository.GetByEmailAsync(email, cancellationToken);
 
         if (user == null)
         {
-            // Create new user
-            user = User.Create(
-                googleUserInfo.Email,
-                googleUserInfo.FirstName,
-                googleUserInfo.LastName,
-                googleUserInfo.GoogleId,
-                googleUserInfo.ProfilePictureUrl);
+            // Create new user from OAuth data
+            // CreateFromOAuth handles null/empty lastName gracefully
+            user = User.CreateFromOAuth(
+                email,
+                firstName,
+                lastName,  // May be null
+                googleId,
+                profilePicture);
 
             await _userRepository.AddAsync(user, cancellationToken);
         }
         else
         {
-            // Update existing user
+            // Update existing user profile
+            // Only update fields that have values from Google
             user.UpdateProfile(
-                googleUserInfo.FirstName,
-                googleUserInfo.LastName,
-                googleUserInfo.ProfilePictureUrl);
+                firstName,
+                lastName,
+                profilePicture);
         }
 
-        // Step 4: Record login
+        // Step 5: Record login
         user.RecordLogin();
         await _userRepository.SaveChangesAsync(cancellationToken);
 
-        // Step 5: Create session with refresh token
+        // Step 6: Create session with refresh token
         var refreshToken = _tokenService.GenerateRefreshToken();
         var refreshTokenHash = _tokenService.HashRefreshToken(refreshToken);
         var sessionExpiresAt = DateTime.UtcNow.Add(_tokenService.RefreshTokenLifetime);
@@ -172,7 +178,7 @@ public class AuthService : IAuthService
         await _sessionRepository.AddAsync(session, cancellationToken);
         await _sessionRepository.SaveChangesAsync(cancellationToken);
 
-        // Step 6: Generate access token
+        // Step 7: Generate access token
         var accessToken = _tokenService.GenerateAccessToken(user, session.Id);
 
         return new AuthenticationResult
@@ -184,6 +190,34 @@ public class AuthService : IAuthService
             RefreshTokenExpiresAt = sessionExpiresAt,
             User = MapToUserInfoResponse(user)
         };
+    }
+
+    /// <summary>
+    /// Safely extracts Google profile data with appropriate fallbacks.
+    /// Handles cases where Google may not provide certain fields.
+    /// </summary>
+    private static (string email, string firstName, string? lastName, string googleId, string? profilePicture) 
+        ExtractGoogleProfileSafely(GoogleUserInfo googleUserInfo)
+    {
+        // Email is always required
+        var email = googleUserInfo.Email;
+        
+        // Google may not provide separate first/last name fields
+        // Use the best available name data
+        var firstName = !string.IsNullOrWhiteSpace(googleUserInfo.FirstName) 
+            ? googleUserInfo.FirstName 
+            : googleUserInfo.GetBestAvailableName();  // Fallback to full name or "User"
+        
+        // Last name is optional - may be null
+        var lastName = googleUserInfo.LastName;
+        
+        // Google ID is always required
+        var googleId = googleUserInfo.GoogleId;
+        
+        // Profile picture is optional
+        var profilePicture = googleUserInfo.ProfilePictureUrl;
+
+        return (email, firstName, lastName, googleId, profilePicture);
     }
 
     public async Task<UserInfoResponse?> GetCurrentUserAsync(
@@ -336,6 +370,7 @@ public class AuthService : IAuthService
             Email = user.Email,
             FirstName = user.FirstName,
             LastName = user.LastName,
+            DisplayName = user.GetDisplayName(),  // Combines first + last name
             ProfilePictureUrl = user.ProfilePictureUrl,
             CreatedAt = user.CreatedAt,
             LastLoginAt = user.LastLoginAt

@@ -28,14 +28,19 @@ public class JwtTokenService : IJwtTokenService
         var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
-        var claims = new[]
+        var claims = new List<Claim>
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new Claim(JwtRegisteredClaimNames.Email, user.Email),
             new Claim(JwtRegisteredClaimNames.GivenName, user.FirstName),
-            new Claim(JwtRegisteredClaimNames.FamilyName, user.LastName),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
+        
+        // Only add family name claim if user has a last name
+        if (!string.IsNullOrWhiteSpace(user.LastName))
+        {
+            claims.Add(new Claim(JwtRegisteredClaimNames.FamilyName, user.LastName));
+        }
 
         var token = new JwtSecurityToken(
             issuer: issuer,

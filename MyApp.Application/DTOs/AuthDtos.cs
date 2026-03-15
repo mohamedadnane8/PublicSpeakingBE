@@ -8,7 +8,17 @@ public class UserInfoResponse
     public Guid Id { get; set; }
     public string Email { get; set; } = null!;
     public string FirstName { get; set; } = null!;
-    public string LastName { get; set; } = null!;
+    
+    /// <summary>
+    /// Last name may be null for OAuth users who haven't provided one
+    /// </summary>
+    public string? LastName { get; set; }
+    
+    /// <summary>
+    /// Display name combining first and last name
+    /// </summary>
+    public string DisplayName { get; set; } = null!;
+    
     public string? ProfilePictureUrl { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime LastLoginAt { get; set; }
