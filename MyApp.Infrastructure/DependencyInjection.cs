@@ -19,7 +19,9 @@ public static class DependencyInjection
         services.AddDbContext<ApplicationDbContext>(options =>
             options.UseNpgsql(
                 configuration.GetConnectionString("DefaultConnection"),
-                b => b.MigrationsAssembly("MyApp.Infrastructure")));
+                b => b.MigrationsAssembly("MyApp.Infrastructure"))
+            .ConfigureWarnings(warnings => 
+                warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
         // Repositories
         services.AddScoped<IUserRepository, UserRepository>();
