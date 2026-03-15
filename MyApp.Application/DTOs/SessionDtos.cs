@@ -85,4 +85,5 @@ public class SessionDto
 
     public SessionAudioDto? Audio { get; set; }
     public string? Transcript { get; set; }
+    public string? Advice { get; set; }
 }
