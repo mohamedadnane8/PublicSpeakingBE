@@ -24,12 +24,12 @@ WORKDIR /app
 # Install curl for healthchecks
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user for security
-RUN adduser --disabled-password --gecos "" appuser && chown -R appuser /app
-USER appuser
-
 # Copy published app
 COPY --from=build /app/publish .
+
+# Create non-root user for security
+RUN useradd -m appuser && chown -R appuser:appuser /app
+USER appuser
 
 # Expose port
 EXPOSE 8080
