@@ -19,6 +19,7 @@ public class SessionsController : ControllerBase
     }
 
     [HttpPost]
+    [HttpPost("record")]
     public async Task<ActionResult<SessionDto>> CreateSession(
         [FromBody] CreateSessionRequest request,
         CancellationToken cancellationToken)
