@@ -12,13 +12,17 @@ COPY MyApp.API/*.csproj MyApp.API/
 # Restore dependencies
 RUN dotnet restore
 
+# Install dotnet-ef tool for migrations
+RUN dotnet tool install --global dotnet-ef --version 10.0.5
+ENV PATH="${PATH}:/root/.dotnet/tools"
+
 # Copy everything else and build
 COPY . .
 RUN dotnet build -c Release --no-restore
 RUN dotnet publish MyApp.API/MyApp.API.csproj -c Release -o /app/publish --no-build
 
 # Runtime stage
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-preview AS runtime
+FROM mcr.microsoft.com/dotnet/sdk:10.0-preview AS runtime
 WORKDIR /app
 
 # Install curl for healthchecks
@@ -26,6 +30,9 @@ RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
 # Copy published app
 COPY --from=build /app/publish .
+
+# Copy ef migrations (needed for dotnet ef commands)
+COPY --from=build /src/MyApp.Infrastructure/Data/Migrations ./Migrations
 
 # Create non-root user for security
 RUN useradd -m appuser && chown -R appuser:appuser /app
