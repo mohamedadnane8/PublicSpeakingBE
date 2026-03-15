@@ -32,6 +32,7 @@ public static class DependencyInjection
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<ISessionRepository, SessionRepository>();
         services.AddScoped<IUserSessionRepository, UserSessionRepository>();
+        services.AddScoped<IFeatureRequestRepository, FeatureRequestRepository>();
 
         // S3 Storage
         services.Configure<S3StorageOptions>(configuration.GetSection(S3StorageOptions.SectionName));

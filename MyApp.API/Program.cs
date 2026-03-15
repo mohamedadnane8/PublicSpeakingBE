@@ -129,6 +129,7 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ISessionService, SessionService>();
 builder.Services.AddScoped<IWordService, WordService>();
+builder.Services.AddScoped<IFeatureRequestService, FeatureRequestService>();
 
 var app = builder.Build();
 
