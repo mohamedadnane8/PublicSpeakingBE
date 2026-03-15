@@ -134,6 +134,23 @@ This implementation uses **OAuth 2.0 Authorization Code flow with PKCE** and **H
 - ✅ **Refresh Token Rotation** - New refresh token on every use
 - ✅ **Short-lived Access Tokens** - 15 minutes by default
 
+### Cookie Policy Override (When Frontend and API are Cross-Site)
+
+If your frontend runs on `http://localhost:3000` while API runs on another site (for example `https://api.yourapp.com`), browsers may not send auth cookies with `SameSite=Strict`.
+
+You can override cookie policy with environment variables:
+
+```bash
+AUTH_COOKIES_SAMESITE=None
+AUTH_COOKIES_SECURE=true
+```
+
+In Docker Compose these map to:
+- `AuthCookies__SameSite`
+- `AuthCookies__Secure`
+
+Important: modern browsers can still block third-party cookies. The most reliable setup is hosting frontend and API on the same site (same eTLD+1).
+
 ---
 
 ## API Endpoints
@@ -266,7 +283,7 @@ async function fetchWithAuth(url, options = {}) {
 5. **AutoMapper** - Simple mapping functions work fine
 
 ---
-
+auth/callback/google
 ## Layer Responsibilities
 
 ### Domain Layer

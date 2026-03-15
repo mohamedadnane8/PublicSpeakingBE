@@ -22,6 +22,8 @@ services:
       - GoogleOAuth__ClientSecret=${GOOGLE_CLIENT_SECRET}
       - GoogleOAuth__RedirectUri=${GOOGLE_REDIRECT_URI}
       - Frontend__BaseUrl=${FRONTEND_URL}
+      - AuthCookies__SameSite=${AUTH_COOKIES_SAMESITE:-Strict}
+      - AuthCookies__Secure=${AUTH_COOKIES_SECURE:-true}
     networks:
       - app-network
     healthcheck:
