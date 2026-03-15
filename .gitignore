@@ -453,3 +453,15 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
+
+# Environment variables (security)
+.env
+.env.*
+!.env.example
+
+# Docker
+postgres-data/
+
+# Deployment scripts with secrets
+*.pem
+*.key

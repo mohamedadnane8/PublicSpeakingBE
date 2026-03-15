@@ -1,0 +1,40 @@
+# Build outputs
+**/bin/
+**/obj/
+**/out/
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Documentation
+*.md
+DEPLOYMENT.md
+OAUTH_IMPLEMENTATION.md
+
+# Environment files (security)
+.env
+.env.*
+!.env.example
+
+# Scripts
+updateContainer.sh
+
+# Test files
+**/*Tests/
+**/*Test/
+
+# Misc
+*.log
+.DS_Store
