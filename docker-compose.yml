@@ -24,6 +24,8 @@ services:
       - Frontend__BaseUrl=${FRONTEND_URL}
       - AuthCookies__SameSite=${AUTH_COOKIES_SAMESITE:-Strict}
       - AuthCookies__Secure=${AUTH_COOKIES_SECURE:-true}
+      - S3Storage__BucketName=${S3_BUCKET_NAME}
+      - S3Storage__Region=${S3_REGION:-eu-north-1}
     networks:
       - app-network
     healthcheck:

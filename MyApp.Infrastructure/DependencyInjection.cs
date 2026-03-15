@@ -1,11 +1,15 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using Amazon;
+using Amazon.S3;
 using MyApp.Application.Interfaces;
 using MyApp.Domain.Entities;
 using MyApp.Infrastructure.Authentication;
 using MyApp.Infrastructure.Data;
 using MyApp.Infrastructure.Repositories;
+using MyApp.Infrastructure.Storage;
 
 namespace MyApp.Infrastructure;
 
@@ -27,6 +31,22 @@ public static class DependencyInjection
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<ISessionRepository, SessionRepository>();
         services.AddScoped<IUserSessionRepository, UserSessionRepository>();
+
+        // S3 Storage
+        services.Configure<S3StorageOptions>(configuration.GetSection(S3StorageOptions.SectionName));
+
+        services.AddSingleton<IAmazonS3>(serviceProvider =>
+        {
+            var options = serviceProvider.GetRequiredService<IOptions<S3StorageOptions>>().Value;
+            if (string.IsNullOrWhiteSpace(options.Region))
+            {
+                throw new InvalidOperationException("S3Storage:Region is required.");
+            }
+
+            var region = RegionEndpoint.GetBySystemName(options.Region);
+            return new AmazonS3Client(region);
+        });
+        services.AddScoped<IS3StorageService, S3StorageService>();
 
         // Authentication services
         services.AddScoped<IGoogleTokenValidator, GoogleTokenValidator>();
