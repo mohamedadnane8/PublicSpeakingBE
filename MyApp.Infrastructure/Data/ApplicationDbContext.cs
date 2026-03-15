@@ -23,6 +23,8 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<Session>(entity =>
         {
             entity.Property(e => e.Mode).HasConversion<string>();
+            entity.Property(e => e.Language).HasConversion<string>();
+            entity.Property(e => e.Difficulty).HasConversion<string>();
             entity.Property(e => e.Status).HasConversion<string>();
             entity.Property(e => e.CancelReason).HasConversion<string>();
             entity.Property(e => e.AudioErrorCode).HasConversion<string>();
@@ -68,8 +70,12 @@ public class ApplicationDbContext : DbContext
             entity.HasIndex(e => e.UserId);
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => e.CreatedAt);
+            entity.HasIndex(e => e.Language);
+            entity.HasIndex(e => e.Difficulty);
 
             entity.Property(e => e.Word).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Language).HasMaxLength(10).IsRequired();
+            entity.Property(e => e.Difficulty).HasMaxLength(20).IsRequired();
             entity.Property(e => e.Notes).HasColumnType("text");
             entity.Property(e => e.Transcript).HasColumnType("text");
             

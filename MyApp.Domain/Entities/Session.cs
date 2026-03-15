@@ -15,6 +15,8 @@ public class Session
 
     // Session Configuration
     public SessionMode Mode { get; private set; }
+    public SessionLanguage Language { get; private set; }
+    public SessionDifficulty Difficulty { get; private set; }
     public string Word { get; private set; } = null!;
 
     // Timing Settings
@@ -61,6 +63,8 @@ public class Session
         Guid userId,
         DateTime createdAt,
         SessionMode mode,
+        SessionLanguage language,
+        SessionDifficulty difficulty,
         string word,
         int thinkSeconds,
         int speakSeconds)
@@ -86,6 +90,8 @@ public class Session
             UserId = userId,
             CreatedAt = createdAt,
             Mode = mode,
+            Language = language,
+            Difficulty = difficulty,
             Word = word,
             ThinkSeconds = thinkSeconds,
             SpeakSeconds = speakSeconds,

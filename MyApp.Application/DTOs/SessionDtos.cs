@@ -12,6 +12,8 @@ public class CreateSessionRequest
 
     // Session Configuration
     public string Mode { get; set; } = null!;
+    public string Language { get; set; } = "EN";
+    public string Difficulty { get; set; } = "MEDIUM";
     public string Word { get; set; } = null!;
 
     // Timing Settings
@@ -67,6 +69,8 @@ public class SessionDto
     public DateTime? CompletedAt { get; set; }
 
     public string Mode { get; set; } = null!;
+    public string Language { get; set; } = null!;
+    public string Difficulty { get; set; } = null!;
     public string Word { get; set; } = null!;
 
     public int ThinkSeconds { get; set; }

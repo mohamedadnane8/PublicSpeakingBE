@@ -21,6 +21,8 @@ public class SessionService : ISessionService
     {
         // Parse enums
         var mode = ParseEnum<SessionMode>(request.Mode);
+        var language = ParseEnum<SessionLanguage>(request.Language);
+        var difficulty = ParseEnum<SessionDifficulty>(request.Difficulty);
         var status = ParseEnum<SessionStatus>(request.Status);
         var cancelReason = string.IsNullOrEmpty(request.CancelReason) 
             ? (CancelReason?)null 
@@ -32,6 +34,8 @@ public class SessionService : ISessionService
             userId,
             request.CreatedAt,
             mode,
+            language,
+            difficulty,
             request.Word,
             request.ThinkSeconds,
             request.SpeakSeconds);
@@ -110,6 +114,8 @@ public class SessionService : ISessionService
             CreatedAt = session.CreatedAt,
             CompletedAt = session.CompletedAt,
             Mode = session.Mode.ToString(),
+            Language = session.Language.ToString().ToUpperInvariant(),
+            Difficulty = session.Difficulty.ToString().ToUpperInvariant(),
             Word = session.Word,
             ThinkSeconds = session.ThinkSeconds,
             SpeakSeconds = session.SpeakSeconds,
