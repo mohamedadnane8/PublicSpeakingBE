@@ -11,11 +11,17 @@ namespace MyApp.API.Controllers;
 [Authorize]
 public class SessionsController : ControllerBase
 {
-    private readonly ISessionService _sessionService;
+    private static readonly TimeSpan AudioUrlTtl = TimeSpan.FromMinutes(15);
 
-    public SessionsController(ISessionService sessionService)
+    private readonly ISessionService _sessionService;
+    private readonly IS3StorageService _s3StorageService;
+
+    public SessionsController(
+        ISessionService sessionService,
+        IS3StorageService s3StorageService)
     {
         _sessionService = sessionService;
+        _s3StorageService = s3StorageService;
     }
 
     [HttpPost]
@@ -80,6 +86,40 @@ public class SessionsController : ControllerBase
 
         await _sessionService.DeleteSessionAsync(id, cancellationToken);
         return NoContent();
+    }
+
+    [HttpGet("{id:guid}/audio-url")]
+    [ProducesResponseType(typeof(AudioPlaybackUrlDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<AudioPlaybackUrlDto>> GetSessionAudioUrl(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var session = await _sessionService.GetSessionAsync(id, cancellationToken);
+        if (session == null)
+        {
+            return NotFound(new { error = "Session not found" });
+        }
+
+        var userId = GetCurrentUserId();
+        if (session.UserId != userId)
+        {
+            return Forbid();
+        }
+
+        var objectKey = session.Audio?.ObjectKey;
+        if (string.IsNullOrWhiteSpace(objectKey))
+        {
+            return NotFound(new { error = "Audio not available for this session" });
+        }
+
+        var url = await _s3StorageService.GetPreSignedGetUrlAsync(objectKey, AudioUrlTtl, cancellationToken);
+        return Ok(new AudioPlaybackUrlDto
+        {
+            Url = url,
+            ExpiresAt = DateTime.UtcNow.Add(AudioUrlTtl)
+        });
     }
 
     private Guid GetCurrentUserId()

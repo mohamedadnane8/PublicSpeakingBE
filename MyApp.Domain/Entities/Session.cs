@@ -48,6 +48,10 @@ public class Session
     public DateTime? AudioRecordingStartedAt { get; private set; }
     public DateTime? AudioRecordingEndedAt { get; private set; }
     public AudioErrorCode? AudioErrorCode { get; private set; }
+    public string? AudioObjectKey { get; private set; }
+    public string? AudioBucketName { get; private set; }
+    public string? AudioRegion { get; private set; }
+    public DateTime? AudioUploadedAt { get; private set; }
 
     // Transcript
     public string? Transcript { get; private set; }
@@ -158,13 +162,21 @@ public class Session
         int? durationMs = null,
         DateTime? recordingStartedAt = null,
         DateTime? recordingEndedAt = null,
-        AudioErrorCode? errorCode = null)
+        AudioErrorCode? errorCode = null,
+        string? objectKey = null,
+        string? bucketName = null,
+        string? region = null,
+        DateTime? uploadedAt = null)
     {
         AudioAvailable = available;
         AudioDurationMs = durationMs;
         AudioRecordingStartedAt = recordingStartedAt;
         AudioRecordingEndedAt = recordingEndedAt;
         AudioErrorCode = errorCode;
+        AudioObjectKey = string.IsNullOrWhiteSpace(objectKey) ? null : objectKey.Trim();
+        AudioBucketName = string.IsNullOrWhiteSpace(bucketName) ? null : bucketName.Trim();
+        AudioRegion = string.IsNullOrWhiteSpace(region) ? null : region.Trim();
+        AudioUploadedAt = uploadedAt;
     }
 
     public void SetTranscript(string? transcript)

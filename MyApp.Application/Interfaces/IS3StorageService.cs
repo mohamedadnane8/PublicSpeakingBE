@@ -11,4 +11,9 @@ public interface IS3StorageService
         string contentType,
         long fileSize,
         CancellationToken cancellationToken = default);
+
+    Task<string> GetPreSignedGetUrlAsync(
+        string objectKey,
+        TimeSpan expiresIn,
+        CancellationToken cancellationToken = default);
 }

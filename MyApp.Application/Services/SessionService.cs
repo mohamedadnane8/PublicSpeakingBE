@@ -306,7 +306,11 @@ public class SessionService : ISessionService
                 request.Audio.DurationMs,
                 request.Audio.RecordingStartedAt,
                 request.Audio.RecordingEndedAt,
-                audioError);
+                audioError,
+                request.Audio.ObjectKey,
+                request.Audio.BucketName,
+                request.Audio.Region,
+                request.Audio.UploadedAt);
         }
 
         // Set transcript
@@ -379,7 +383,11 @@ public class SessionService : ISessionService
                 DurationMs = session.AudioDurationMs,
                 RecordingStartedAt = session.AudioRecordingStartedAt,
                 RecordingEndedAt = session.AudioRecordingEndedAt,
-                ErrorCode = session.AudioErrorCode?.ToString()
+                ErrorCode = session.AudioErrorCode?.ToString(),
+                ObjectKey = session.AudioObjectKey,
+                BucketName = session.AudioBucketName,
+                Region = session.AudioRegion,
+                UploadedAt = session.AudioUploadedAt
             },
             Transcript = session.Transcript,
             Advice = advice

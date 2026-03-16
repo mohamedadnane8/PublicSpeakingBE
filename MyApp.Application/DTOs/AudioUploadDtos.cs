@@ -8,3 +8,9 @@ public class AudioUploadResultDto
     public long FileSize { get; set; }
     public string ContentType { get; set; } = null!;
 }
+
+public class AudioPlaybackUrlDto
+{
+    public string Url { get; set; } = null!;
+    public DateTime ExpiresAt { get; set; }
+}

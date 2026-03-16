@@ -91,6 +91,28 @@ public class S3StorageService : IS3StorageService
         };
     }
 
+    public Task<string> GetPreSignedGetUrlAsync(
+        string objectKey,
+        TimeSpan expiresIn,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(objectKey))
+            throw new ArgumentException("Object key is required.", nameof(objectKey));
+
+        var ttl = expiresIn <= TimeSpan.Zero ? TimeSpan.FromMinutes(10) : expiresIn;
+
+        var request = new GetPreSignedUrlRequest
+        {
+            BucketName = _options.BucketName,
+            Key = objectKey.Trim(),
+            Verb = HttpVerb.GET,
+            Expires = DateTime.UtcNow.Add(ttl)
+        };
+
+        var url = _s3Client.GetPreSignedURL(request);
+        return Task.FromResult(url);
+    }
+
     private static string BuildObjectKey(Guid userId, string originalFileName)
     {
         var extension = Path.GetExtension(originalFileName)?.ToLowerInvariant() ?? string.Empty;

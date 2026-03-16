@@ -58,6 +58,10 @@ public class SessionAudioDto
     public DateTime? RecordingStartedAt { get; set; }
     public DateTime? RecordingEndedAt { get; set; }
     public string? ErrorCode { get; set; }
+    public string? ObjectKey { get; set; }
+    public string? BucketName { get; set; }
+    public string? Region { get; set; }
+    public DateTime? UploadedAt { get; set; }
 }
 
 // Response DTO
