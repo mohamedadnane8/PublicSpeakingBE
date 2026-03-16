@@ -11,5 +11,6 @@ public interface ISessionRepository
     Task<IReadOnlyList<Session>> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken = default);
     Task<Session> AddAsync(Session session, CancellationToken cancellationToken = default);
     Task UpdateAsync(Session session, CancellationToken cancellationToken = default);
+    Task<bool> DeleteByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task SaveChangesAsync(CancellationToken cancellationToken = default);
 }

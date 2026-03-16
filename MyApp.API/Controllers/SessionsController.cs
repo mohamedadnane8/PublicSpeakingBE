@@ -61,6 +61,27 @@ public class SessionsController : ControllerBase
         return Ok(sessions);
     }
 
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> DeleteSession(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var session = await _sessionService.GetSessionAsync(id, cancellationToken);
+        if (session == null)
+        {
+            return NotFound(new { error = "Session not found" });
+        }
+
+        var userId = GetCurrentUserId();
+        if (session.UserId != userId)
+        {
+            return Forbid();
+        }
+
+        await _sessionService.DeleteSessionAsync(id, cancellationToken);
+        return NoContent();
+    }
+
     private Guid GetCurrentUserId()
     {
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value

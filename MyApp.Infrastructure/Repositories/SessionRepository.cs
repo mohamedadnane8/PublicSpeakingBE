@@ -41,6 +41,20 @@ public class SessionRepository : ISessionRepository
         return Task.CompletedTask;
     }
 
+    public async Task<bool> DeleteByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var session = await _context.Sessions
+            .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
+
+        if (session == null)
+        {
+            return false;
+        }
+
+        _context.Sessions.Remove(session);
+        return true;
+    }
+
     public async Task SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         await _context.SaveChangesAsync(cancellationToken);

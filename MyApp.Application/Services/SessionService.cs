@@ -331,6 +331,18 @@ public class SessionService : ISessionService
         return sessions.Select(MapToDto).ToList();
     }
 
+    public async Task<bool> DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    {
+        var deleted = await _sessionRepository.DeleteByIdAsync(sessionId, cancellationToken);
+        if (!deleted)
+        {
+            return false;
+        }
+
+        await _sessionRepository.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
     private static SessionDto MapToDto(Session session)
     {
         var advice = BuildAdvice(session);
