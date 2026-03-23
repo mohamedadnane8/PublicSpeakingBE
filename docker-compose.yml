@@ -34,6 +34,13 @@ services:
       - S3Storage__AccessKeyId=${AWS_ACCESS_KEY_ID}
       - S3Storage__SecretAccessKey=${AWS_SECRET_ACCESS_KEY}
       - S3Storage__SessionToken=${AWS_SESSION_TOKEN:-}
+      # DeepSeek AI
+      - DeepSeek__ApiKey=${DEEPSEEK_API_KEY}
+      - DeepSeek__BaseUrl=${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      # Resume upload config
+      - ResumeUpload__UploadCooldownHours=${RESUME_COOLDOWN_HOURS:-24}
+      - ResumeUpload__QuestionsPerBatch=${RESUME_QUESTIONS_PER_BATCH:-50}
+      - ResumeUpload__EnableSecondBatch=${RESUME_ENABLE_SECOND_BATCH:-true}
     networks:
       - app-network
     healthcheck:
