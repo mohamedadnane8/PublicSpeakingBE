@@ -6,10 +6,11 @@ using Amazon;
 using Amazon.Runtime;
 using Amazon.S3;
 using MyApp.Application.Interfaces;
-using MyApp.Domain.Entities;
 using MyApp.Infrastructure.Authentication;
+using MyApp.Infrastructure.Configuration;
 using MyApp.Infrastructure.Data;
 using MyApp.Infrastructure.Repositories;
+using MyApp.Infrastructure.Services;
 using MyApp.Infrastructure.Storage;
 
 namespace MyApp.Infrastructure;
@@ -72,32 +73,23 @@ public static class DependencyInjection
         // Authentication services
         services.AddScoped<IGoogleTokenValidator, GoogleTokenValidator>();
         services.AddScoped<ITokenService, TokenService>();
-        // Note: IJwtTokenService is replaced by ITokenService
-        // Remove registration for IJwtTokenService if not used elsewhere
-        services.AddScoped<IJwtTokenService, JwtTokenServiceAdapter>();
+
+        // Resume parsing
+        services.AddScoped<IResumeParserService, ResumeParserService>();
+
+        // Interview question repository
+        services.AddScoped<IInterviewQuestionRepository, InterviewQuestionRepository>();
+
+        // DeepSeek AI
+        services.Configure<DeepSeekOptions>(configuration.GetSection(DeepSeekOptions.SectionName));
+        services.AddHttpClient<IDeepSeekService, DeepSeekService>(client =>
+        {
+            client.Timeout = TimeSpan.FromMinutes(5);
+        });
+
+        // Resume upload rate limiting
+        services.Configure<ResumeUploadOptions>(configuration.GetSection(ResumeUploadOptions.SectionName));
 
         return services;
-    }
-}
-
-/// <summary>
-/// Adapter to maintain backward compatibility with IJwtTokenService
-/// </summary>
-public class JwtTokenServiceAdapter : IJwtTokenService
-{
-    private readonly ITokenService _tokenService;
-
-    public JwtTokenServiceAdapter(ITokenService tokenService)
-    {
-        _tokenService = tokenService;
-    }
-
-    public string GenerateToken(User user)
-    {
-        // Generate a token without session ID for backward compatibility
-        // This is a simplified version - in production, migrate all usages to ITokenService
-        throw new NotImplementedException(
-            "Use ITokenService.GenerateAccessToken with session ID instead. " +
-            "This method is deprecated for security reasons.");
     }
 }
