@@ -3,9 +3,8 @@ namespace MyApp.Application.DTOs;
 public record ResumeContentDto(
     string FileName,
     string ContentType,
-    string Content,
     int PageCount,
-    List<InterviewQuestionDto> Questions
+    int QuestionsGenerated
 );
 
 public record InterviewQuestionDto(

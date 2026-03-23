@@ -204,22 +204,12 @@ public class ResumeController : ControllerBase
                 });
             }
 
-            var questionDtos = questions.Select(q => new InterviewQuestionDto(
-                q.Id,
-                q.Question,
-                q.Category,
-                q.Difficulty.ToString(),
-                q.ThinkingSeconds,
-                q.AnsweringSeconds
-            )).ToList();
-
             memoryStream.Position = 0;
             var result = new ResumeContentDto(
                 FileName: file.FileName,
                 ContentType: file.ContentType ?? normalizedContentType,
-                Content: content,
                 PageCount: extension == ".pdf" ? CountPdfPages(memoryStream) : 1,
-                Questions: questionDtos
+                QuestionsGenerated: questions.Count
             );
 
             return Ok(result);
