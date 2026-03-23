@@ -7,8 +7,10 @@ using Amazon.Runtime;
 using Amazon.S3;
 using MyApp.Application.Interfaces;
 using MyApp.Infrastructure.Authentication;
+using MyApp.Infrastructure.Configuration;
 using MyApp.Infrastructure.Data;
 using MyApp.Infrastructure.Repositories;
+using MyApp.Infrastructure.Services;
 using MyApp.Infrastructure.Storage;
 
 namespace MyApp.Infrastructure;
@@ -71,6 +73,22 @@ public static class DependencyInjection
         // Authentication services
         services.AddScoped<IGoogleTokenValidator, GoogleTokenValidator>();
         services.AddScoped<ITokenService, TokenService>();
+
+        // Resume parsing
+        services.AddScoped<IResumeParserService, ResumeParserService>();
+
+        // Interview question repository
+        services.AddScoped<IInterviewQuestionRepository, InterviewQuestionRepository>();
+
+        // DeepSeek AI
+        services.Configure<DeepSeekOptions>(configuration.GetSection(DeepSeekOptions.SectionName));
+        services.AddHttpClient<IDeepSeekService, DeepSeekService>(client =>
+        {
+            client.Timeout = TimeSpan.FromMinutes(5);
+        });
+
+        // Resume upload rate limiting
+        services.Configure<ResumeUploadOptions>(configuration.GetSection(ResumeUploadOptions.SectionName));
 
         return services;
     }
