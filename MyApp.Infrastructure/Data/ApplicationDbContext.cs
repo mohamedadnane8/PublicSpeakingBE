@@ -15,6 +15,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<Session> Sessions => Set<Session>();
     public DbSet<FeatureRequest> FeatureRequests => Set<FeatureRequest>();
+    public DbSet<InterviewQuestion> InterviewQuestions => Set<InterviewQuestion>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -95,6 +96,24 @@ public class ApplicationDbContext : DbContext
 
             entity.Property(e => e.Message).HasMaxLength(2000).IsRequired();
             entity.Property(e => e.PageUrl).HasMaxLength(500);
+
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // InterviewQuestion configuration
+        modelBuilder.Entity<InterviewQuestion>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.Difficulty);
+            entity.HasIndex(e => e.CreatedAt);
+
+            entity.Property(e => e.Question).HasColumnType("text").IsRequired();
+            entity.Property(e => e.Category).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Difficulty).HasConversion<string>().HasMaxLength(20).IsRequired();
 
             entity.HasOne(e => e.User)
                 .WithMany()
