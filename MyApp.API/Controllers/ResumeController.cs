@@ -16,7 +16,6 @@ namespace MyApp.API.Controllers;
 public class ResumeController : ControllerBase
 {
     private const long MaxFileSizeBytes = 10 * 1024 * 1024; // 10 MB
-    private const int QuestionsPerBatch = 50;
 
     private static readonly Dictionary<string, HashSet<string>> AllowedContentTypesByExtension =
         new(StringComparer.OrdinalIgnoreCase)
@@ -153,9 +152,11 @@ public class ResumeController : ControllerBase
             // Delete old questions for this user
             await _questionRepository.DeleteByUserIdAsync(userId, cancellationToken);
 
-            // Batch 1: generate first 50 questions synchronously
+            var questionsPerBatch = _uploadOptions.QuestionsPerBatch;
+
+            // Batch 1: generate first batch synchronously
             var batch1 = await _deepSeekService.GenerateInterviewQuestionsAsync(
-                content, batchNumber: 1, questionsPerBatch: QuestionsPerBatch, cancellationToken);
+                content, batchNumber: 1, questionsPerBatch: questionsPerBatch, cancellationToken);
 
             if (batch1.Count == 0)
             {
@@ -170,35 +171,38 @@ public class ResumeController : ControllerBase
             await _questionRepository.AddRangeAsync(questions, cancellationToken);
             await _questionRepository.SaveChangesAsync(cancellationToken);
 
-            // Batch 2: fire in background — uses a new DI scope since the request scope will be disposed
-            var resumeText = content;
-            _ = Task.Run(async () =>
+            // Batch 2: fire in background if enabled
+            if (_uploadOptions.EnableSecondBatch)
             {
-                try
+                var resumeText = content;
+                _ = Task.Run(async () =>
                 {
-                    using var scope = _scopeFactory.CreateScope();
-                    var deepSeek = scope.ServiceProvider.GetRequiredService<IDeepSeekService>();
-                    var repo = scope.ServiceProvider.GetRequiredService<IInterviewQuestionRepository>();
-                    var logger = scope.ServiceProvider.GetRequiredService<ILogger<ResumeController>>();
-
-                    var batch2 = await deepSeek.GenerateInterviewQuestionsAsync(
-                        resumeText, batchNumber: 2, questionsPerBatch: QuestionsPerBatch);
-
-                    if (batch2.Count > 0)
+                    try
                     {
-                        var batch2Questions = MapAndCreateEntities(userId, batch2);
-                        await repo.AddRangeAsync(batch2Questions);
-                        await repo.SaveChangesAsync();
-                        logger.LogInformation("Batch 2: stored {Count} questions for user {UserId}.", batch2Questions.Count, userId);
+                        using var scope = _scopeFactory.CreateScope();
+                        var deepSeek = scope.ServiceProvider.GetRequiredService<IDeepSeekService>();
+                        var repo = scope.ServiceProvider.GetRequiredService<IInterviewQuestionRepository>();
+                        var logger = scope.ServiceProvider.GetRequiredService<ILogger<ResumeController>>();
+
+                        var batch2 = await deepSeek.GenerateInterviewQuestionsAsync(
+                            resumeText, batchNumber: 2, questionsPerBatch: questionsPerBatch);
+
+                        if (batch2.Count > 0)
+                        {
+                            var batch2Questions = MapAndCreateEntities(userId, batch2);
+                            await repo.AddRangeAsync(batch2Questions);
+                            await repo.SaveChangesAsync();
+                            logger.LogInformation("Batch 2: stored {Count} questions for user {UserId}.", batch2Questions.Count, userId);
+                        }
                     }
-                }
-                catch (Exception ex)
-                {
-                    using var scope = _scopeFactory.CreateScope();
-                    var logger = scope.ServiceProvider.GetRequiredService<ILogger<ResumeController>>();
-                    logger.LogError(ex, "Batch 2 question generation failed for user {UserId}.", userId);
-                }
-            });
+                    catch (Exception ex)
+                    {
+                        using var scope = _scopeFactory.CreateScope();
+                        var logger = scope.ServiceProvider.GetRequiredService<ILogger<ResumeController>>();
+                        logger.LogError(ex, "Batch 2 question generation failed for user {UserId}.", userId);
+                    }
+                });
+            }
 
             var questionDtos = questions.Select(q => new InterviewQuestionDto(
                 q.Id,
