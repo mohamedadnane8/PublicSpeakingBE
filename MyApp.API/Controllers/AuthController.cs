@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using MyApp.Application.DTOs;
 using MyApp.Application.Interfaces;
+using MyApp.Domain.Entities;
 using MyApp.Domain.Exceptions;
 
 namespace MyApp.API.Controllers;
@@ -373,6 +374,94 @@ public class AuthController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// [DEV ONLY] Login without Google OAuth. Creates a test user if needed and sets auth cookies.
+    /// Only available in Development environment.
+    /// </summary>
+    [HttpPost("dev/login")]
+    [ProducesResponseType(typeof(AuthenticationResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> DevLogin(
+        [FromBody] DevLoginRequest request,
+        [FromServices] IWebHostEnvironment env,
+        [FromServices] IUserRepository userRepository,
+        [FromServices] IUserSessionRepository userSessionRepository,
+        CancellationToken cancellationToken)
+    {
+        if (!env.IsDevelopment())
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                error = "forbidden",
+                message = "This endpoint is only available in Development environment."
+            });
+        }
+
+        var email = (request.Email ?? "dev@localhost.com").ToLowerInvariant();
+        var firstName = request.FirstName ?? "Dev";
+        var lastName = request.LastName ?? "User";
+
+        // Find or create user
+        var user = await userRepository.GetByEmailAsync(email, cancellationToken);
+        if (user == null)
+        {
+            user = Domain.Entities.User.CreateFromOAuth(email, firstName, lastName, $"dev-{Guid.NewGuid():N}", null);
+            await userRepository.AddAsync(user, cancellationToken);
+            await userRepository.SaveChangesAsync(cancellationToken);
+            _logger.LogInformation("[DEV] Created test user: {Email} ({Id})", email, user.Id);
+        }
+        else
+        {
+            user.RecordLogin();
+            await userRepository.UpdateAsync(user, cancellationToken);
+            await userRepository.SaveChangesAsync(cancellationToken);
+        }
+
+        // Create session
+        var refreshToken = _tokenService.GenerateRefreshToken();
+        var refreshTokenHash = _tokenService.HashRefreshToken(refreshToken);
+        var session = UserSession.Create(
+            user.Id,
+            refreshTokenHash,
+            DateTime.UtcNow.Add(_tokenService.RefreshTokenLifetime),
+            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            Request.Headers.UserAgent.ToString());
+
+        await userSessionRepository.AddAsync(session, cancellationToken);
+        await userSessionRepository.SaveChangesAsync(cancellationToken);
+
+        // Generate tokens
+        var accessToken = _tokenService.GenerateAccessToken(user, session.Id);
+
+        var authResult = new AuthenticationResult
+        {
+            AccessToken = accessToken,
+            RefreshToken = refreshToken,
+            SessionId = session.Id,
+            AccessTokenExpiresAt = DateTime.UtcNow.Add(_tokenService.AccessTokenLifetime),
+            RefreshTokenExpiresAt = session.ExpiresAt,
+            User = new UserInfoResponse
+            {
+                Id = user.Id,
+                Email = user.Email,
+                FirstName = user.FirstName,
+                LastName = user.LastName,
+                DisplayName = user.GetDisplayName(),
+                ProfilePictureUrl = user.ProfilePictureUrl,
+                CreatedAt = user.CreatedAt,
+                LastLoginAt = user.LastLoginAt
+            }
+        };
+
+        // Set cookies
+        SetAuthenticationCookies(authResult);
+
+        _logger.LogInformation("[DEV] User logged in: {Email} ({Id}), Session: {SessionId}",
+            user.Email, user.Id, session.Id);
+
+        return Ok(authResult);
+    }
+
     // ========== Private Helper Methods ==========
 
     private void SetAuthenticationCookies(AuthenticationResult authResult)
@@ -467,4 +556,14 @@ public class AuthController : ControllerBase
 public class FrontendOptions
 {
     public string BaseUrl { get; set; } = null!;
+}
+
+/// <summary>
+/// Request body for dev login (all fields optional)
+/// </summary>
+public class DevLoginRequest
+{
+    public string? Email { get; set; }
+    public string? FirstName { get; set; }
+    public string? LastName { get; set; }
 }
