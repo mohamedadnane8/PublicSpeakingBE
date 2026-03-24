@@ -130,11 +130,35 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ISessionService, SessionService>();
 builder.Services.AddScoped<IWordService, WordService>();
 builder.Services.AddScoped<IFeatureRequestService, FeatureRequestService>();
+builder.Services.AddSingleton<IBehavioralQuestionService, BehavioralQuestionService>();
+
+// Configure CORS as a service (must be before Build)
+var allowedOrigins = new List<string>();
+var configuredFrontend = builder.Configuration["Frontend:BaseUrl"];
+if (!string.IsNullOrEmpty(configuredFrontend))
+{
+    allowedOrigins.Add(configuredFrontend);
+}
+allowedOrigins.Add("http://localhost:3000");
+allowedOrigins.Add("https://localhost:3000");
+
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy.WithOrigins(allowedOrigins.ToArray())
+              .AllowCredentials()
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
 
 var app = builder.Build();
 
+var logger = app.Services.GetRequiredService<ILogger<Program>>();
+logger.LogInformation("CORS configured with origins: {Origins}", string.Join(", ", allowedOrigins));
+
 // Configure the HTTP request pipeline
-// Enable Swagger in all environments
 app.UseSwagger();
 app.UseSwaggerUI(options =>
 {
@@ -143,38 +167,13 @@ app.UseSwaggerUI(options =>
     options.DocumentTitle = "PublicSpeaking API Documentation";
 });
 
-
 app.UseHttpsRedirection();
-
 
 // Custom exception handling middleware
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
-// Add CORS middleware before authentication
-// Configure allowed origins - supports multiple origins for local development
-var allowedOrigins = new List<string>();
-
-// Add configured frontend URL
-var configuredFrontend = builder.Configuration["Frontend:BaseUrl"];
-if (!string.IsNullOrEmpty(configuredFrontend))
-{
-    allowedOrigins.Add(configuredFrontend);
-}
-
-// Always allow localhost for development (remove in production if needed)
-allowedOrigins.Add("http://localhost:3000");
-allowedOrigins.Add("https://localhost:3000");
-
-var logger = app.Services.GetRequiredService<ILogger<Program>>();
-logger.LogInformation("CORS configured with origins: {Origins}", string.Join(", ", allowedOrigins));
-
-app.UseCors(options =>
-{
-    options.WithOrigins(allowedOrigins.ToArray())
-           .AllowCredentials()  // Required for cookies
-           .AllowAnyHeader()
-           .AllowAnyMethod();
-});
+// CORS must be before auth
+app.UseCors();
 
 app.UseAuthentication();
 app.UseAuthorization();

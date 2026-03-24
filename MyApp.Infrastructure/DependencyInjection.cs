@@ -90,6 +90,19 @@ public static class DependencyInjection
         // Resume upload rate limiting
         services.Configure<ResumeUploadOptions>(configuration.GetSection(ResumeUploadOptions.SectionName));
 
+        // Speech Analysis (reuses DeepSeek config)
+        services.AddHttpClient<ISpeechAnalysisService, SpeechAnalysisService>(client =>
+        {
+            client.Timeout = TimeSpan.FromMinutes(3);
+        });
+
+        // AssemblyAI Transcription
+        services.Configure<AssemblyAIOptions>(configuration.GetSection(AssemblyAIOptions.SectionName));
+        services.AddHttpClient<ITranscriptionService, AssemblyAITranscriptionService>(client =>
+        {
+            client.Timeout = TimeSpan.FromMinutes(15);
+        });
+
         return services;
     }
 }

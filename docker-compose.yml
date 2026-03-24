@@ -38,9 +38,12 @@ services:
       - DeepSeek__ApiKey=${DEEPSEEK_API_KEY}
       - DeepSeek__BaseUrl=${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       # Resume upload config
-      - ResumeUpload__UploadCooldownHours=${RESUME_COOLDOWN_HOURS:-24}
+      - ResumeUpload__MaxUploadsPerWeek=${RESUME_MAX_UPLOADS_PER_WEEK:-5}
       - ResumeUpload__QuestionsPerBatch=${RESUME_QUESTIONS_PER_BATCH:-50}
       - ResumeUpload__EnableSecondBatch=${RESUME_ENABLE_SECOND_BATCH:-true}
+      # AssemblyAI Transcription
+      - AssemblyAI__ApiKey=${ASSEMBLYAI_API_KEY}
+      - AssemblyAI__BaseUrl=${ASSEMBLYAI_BASE_URL:-https://api.assemblyai.com/v2}
     networks:
       - app-network
     healthcheck:
