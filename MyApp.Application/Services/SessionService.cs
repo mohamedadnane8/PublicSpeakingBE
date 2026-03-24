@@ -1,3 +1,5 @@
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using MyApp.Application.DTOs;
 using MyApp.Application.Interfaces;
 using MyApp.Domain.Entities;
@@ -230,14 +232,229 @@ public class SessionService : ISessionService
             "Refine wording so key phrases sound sharper.",
             "Keep language vivid while staying concise.",
             "Use slightly more variation in phrasing."
+        ]),
+
+    ["passion"] = new AdviceTemplate(
+        Label: "passion & novelty",
+        Strength:
+        [
+            "Your enthusiasm lifts the entire delivery.",
+            "Your energy makes the content compelling.",
+            "Your passion comes through naturally."
+        ],
+        Improve:
+        [
+            "Let your personal interest show more in key moments.",
+            "Add a surprising angle or fresh perspective.",
+            "Show why this topic matters to you specifically.",
+            "Bring more energy to the moments that excite you.",
+            "Find one unexpected insight to share."
+        ],
+        Priority:
+        [
+            "Inject more genuine enthusiasm into delivery.",
+            "Find what excites you about this topic and lead with it.",
+            "Add a fresh angle the audience wouldn't expect."
+        ],
+        Polish:
+        [
+            "Let your passion peak at the most important point.",
+            "Add one surprising detail or perspective.",
+            "Channel your energy more precisely into key moments."
         ])
         };
 
-    private readonly ISessionRepository _sessionRepository;
+    // === Interview Speech Advice Templates (STAR framework) ===
+    private static readonly IReadOnlyDictionary<string, AdviceTemplate> InterviewAdviceTemplates =
+        new Dictionary<string, AdviceTemplate>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["relevance"] = new AdviceTemplate(
+            Label: "relevance",
+            Strength:
+            [
+                "Your example directly addresses the question asked.",
+                "You chose a highly relevant story for this question.",
+                "Your answer maps perfectly to what was being asked."
+            ],
+            Improve:
+            [
+                "Make sure the story you pick directly answers the specific question.",
+                "Start by restating the core of the question to anchor your answer.",
+                "Choose an example that demonstrates the exact skill being asked about.",
+                "Ask yourself: does this story prove I have the skill they are testing?",
+                "If your example feels tangential, pivot to a more targeted one."
+            ],
+            Priority:
+            [
+                "Relevance is critical — the wrong story undermines everything else.",
+                "Before speaking, confirm your example actually answers the question.",
+                "Pick a story that directly demonstrates the requested competency."
+            ],
+            Polish:
+            [
+                "Make the connection between question and story even more explicit.",
+                "Open with a sentence that bridges the question to your example.",
+                "Tighten the link so the interviewer never has to guess the relevance."
+            ]),
 
-    public SessionService(ISessionRepository sessionRepository)
+        ["situationStakes"] = new AdviceTemplate(
+            Label: "situation & stakes",
+            Strength:
+            [
+                "You set the context quickly and clearly.",
+                "The stakes were immediately obvious.",
+                "Your setup created genuine tension."
+            ],
+            Improve:
+            [
+                "Describe the situation in two sentences max — who, what, why it mattered.",
+                "Make the stakes explicit: what would have gone wrong without action?",
+                "Add a specific detail that makes the situation feel real (team size, deadline, dollar amount).",
+                "Skip background that does not raise the stakes.",
+                "Frame the situation as a problem that needed solving."
+            ],
+            Priority:
+            [
+                "Spend less time on setup — get to the tension faster.",
+                "The interviewer needs to feel urgency within your first few sentences.",
+                "State the risk or consequence upfront to create stakes."
+            ],
+            Polish:
+            [
+                "Tighten the setup to one crisp sentence plus one stakes sentence.",
+                "Add one concrete metric to make the stakes more vivid.",
+                "Remove any context that does not raise tension."
+            ]),
+
+        ["action"] = new AdviceTemplate(
+            Label: "personal action",
+            Strength:
+            [
+                "You clearly described what YOU specifically did.",
+                "Your actions showed initiative and ownership.",
+                "The steps you took were concrete and well-explained."
+            ],
+            Improve:
+            [
+                "Use 'I' not 'we' — the interviewer wants YOUR contribution.",
+                "Describe the specific steps you took, not what the team did.",
+                "Explain WHY you chose that approach over alternatives.",
+                "Break your action into clear sequential steps.",
+                "Show decision-making: what tradeoffs did you consider?"
+            ],
+            Priority:
+            [
+                "Action is the most important part — this is where you prove your value.",
+                "Replace every 'we' with 'I' and describe YOUR specific contribution.",
+                "Show the interviewer exactly what you did differently that made an impact."
+            ],
+            Polish:
+            [
+                "Add one sentence about why you chose this approach over others.",
+                "Make the sequence of actions crisper.",
+                "Highlight the moment of highest personal ownership."
+            ]),
+
+        ["resultImpact"] = new AdviceTemplate(
+            Label: "result & impact",
+            Strength:
+            [
+                "You quantified the outcome convincingly.",
+                "The result clearly demonstrated your impact.",
+                "Your metrics made the achievement tangible."
+            ],
+            Improve:
+            [
+                "End with a specific metric: percentage, dollar amount, or time saved.",
+                "If you cannot quantify, describe the observable change that resulted.",
+                "Connect the result back to the original problem.",
+                "Mention what you learned or would do differently.",
+                "State the lasting impact: did this become a standard practice?"
+            ],
+            Priority:
+            [
+                "Every STAR answer must end with a measurable result.",
+                "Without numbers, your story is just an anecdote — add a metric.",
+                "The result is what proves the action was worth taking."
+            ],
+            Polish:
+            [
+                "Make the metric more specific (exact percentage, timeline).",
+                "Add a brief note about what you learned.",
+                "Connect the result to broader business impact."
+            ]),
+
+        ["deliveryComposure"] = new AdviceTemplate(
+            Label: "delivery & composure",
+            Strength:
+            [
+                "You delivered the answer with composure and confidence.",
+                "Your pacing felt natural and controlled.",
+                "You maintained presence throughout the answer."
+            ],
+            Improve:
+            [
+                "Slow down during the action and result sections.",
+                "Pause briefly between situation, action, and result.",
+                "Reduce filler words — replace them with short pauses.",
+                "Maintain eye contact (or camera focus) during key moments.",
+                "Keep your energy consistent from start to finish."
+            ],
+            Priority:
+            [
+                "Focus on a calmer, more deliberate delivery pace.",
+                "Replace hesitation with confident pauses.",
+                "Practice the answer out loud to build composure."
+            ],
+            Polish:
+            [
+                "Add cleaner pauses at transition points.",
+                "Keep vocal energy steady through the result section.",
+                "End the answer with a firm, confident final sentence."
+            ]),
+
+        ["conciseness"] = new AdviceTemplate(
+            Label: "conciseness",
+            Strength:
+            [
+                "Your answer was tight and well-paced.",
+                "You covered everything without rambling.",
+                "Every sentence earned its place."
+            ],
+            Improve:
+            [
+                "Aim for 60 to 90 seconds total — you went longer.",
+                "Cut background that does not raise stakes.",
+                "Remove tangential details from the action section.",
+                "One example is enough — do not stack multiple stories.",
+                "End after stating the result — do not add unnecessary caveats."
+            ],
+            Priority:
+            [
+                "Shorter answers score higher — trim ruthlessly.",
+                "The interviewer remembers structure, not length.",
+                "Practice delivering the same story in half the time."
+            ],
+            Polish:
+            [
+                "Tighten by removing one sentence from each STAR section.",
+                "Cut the weakest detail from the situation setup.",
+                "End one sentence earlier than feels natural."
+            ])
+    };
+
+    private readonly ISessionRepository _sessionRepository;
+    private readonly IUserRepository _userRepository;
+    private readonly IServiceScopeFactory _scopeFactory;
+
+    public SessionService(
+        ISessionRepository sessionRepository,
+        IUserRepository userRepository,
+        IServiceScopeFactory scopeFactory)
     {
         _sessionRepository = sessionRepository;
+        _userRepository = userRepository;
+        _scopeFactory = scopeFactory;
     }
 
     public async Task<SessionDto> CreateSessionAsync(
@@ -255,6 +472,10 @@ public class SessionService : ISessionService
             : ParseEnum<CancelReason>(request.CancelReason);
 
         // Create session
+        var sessionType = string.IsNullOrWhiteSpace(request.Type)
+            ? SessionType.General
+            : ParseEnum<SessionType>(request.Type);
+
         var session = Session.Create(
             request.Id,
             userId,
@@ -264,7 +485,8 @@ public class SessionService : ISessionService
             difficulty,
             request.Word,
             request.ThinkSeconds,
-            request.SpeakSeconds);
+            request.SpeakSeconds,
+            sessionType);
 
         // Set status
         session.SetStatus(status, cancelReason);
@@ -275,21 +497,29 @@ public class SessionService : ISessionService
             session.SetCompletedAt(request.CompletedAt.Value);
         }
 
-        // Set ratings if provided
-        if (request.Ratings != null)
+        // Set ratings based on session type
+        if (sessionType == SessionType.Interview && request.InterviewRatings != null)
         {
-            session.SetRatings(
+            session.SetInterviewRatings(
+                request.InterviewRatings.Relevance,
+                request.InterviewRatings.SituationStakes,
+                request.InterviewRatings.Action,
+                request.InterviewRatings.ResultImpact,
+                request.InterviewRatings.DeliveryComposure,
+                request.InterviewRatings.Conciseness);
+        }
+        else if (request.Ratings != null)
+        {
+            session.SetGeneralRatings(
                 request.Ratings.Opening,
                 request.Ratings.Structure,
                 request.Ratings.Ending,
                 request.Ratings.Confidence,
                 request.Ratings.Clarity,
                 request.Ratings.Authenticity,
-                request.Ratings.LanguageExpression);
+                request.Ratings.LanguageExpression,
+                request.Ratings.Passion);
         }
-
-        // Set overall score
-        session.SetOverallScore(request.OverallScore);
 
         // Set notes
         session.SetNotes(request.Notes);
@@ -313,12 +543,59 @@ public class SessionService : ISessionService
                 request.Audio.UploadedAt);
         }
 
-        // Set transcript
+        // Set transcript (from frontend, if provided)
         session.SetTranscript(request.Transcript);
 
         // Save to database
         await _sessionRepository.AddAsync(session, cancellationToken);
         await _sessionRepository.SaveChangesAsync(cancellationToken);
+
+        // Trigger server-side transcription if audio is available and no client transcript was provided
+        if (session.AudioAvailable
+            && !string.IsNullOrWhiteSpace(session.AudioObjectKey)
+            && string.IsNullOrWhiteSpace(request.Transcript))
+        {
+            // Determine language code
+            string? langCode = null;
+            if (session.Type == SessionType.Interview)
+            {
+                var user = await _userRepository.GetByIdAsync(userId, cancellationToken);
+                langCode = user?.ResumeLanguage;
+            }
+            else
+            {
+                langCode = session.Language switch
+                {
+                    SessionLanguage.En => "en",
+                    SessionLanguage.Fr => "fr",
+                    SessionLanguage.Ar => "ar",
+                    _ => null
+                };
+            }
+
+            session.SetTranscriptionStatus("Pending");
+            await _sessionRepository.UpdateAsync(session, cancellationToken);
+            await _sessionRepository.SaveChangesAsync(cancellationToken);
+
+            var audioKey = session.AudioObjectKey;
+            var sid = session.Id;
+            var lang = langCode;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    using var scope = _scopeFactory.CreateScope();
+                    var transcriptionService = scope.ServiceProvider.GetRequiredService<ITranscriptionService>();
+                    await transcriptionService.TranscribeSessionAsync(sid, audioKey, lang);
+                }
+                catch (Exception ex)
+                {
+                    using var scope = _scopeFactory.CreateScope();
+                    var logger = scope.ServiceProvider.GetRequiredService<ILogger<SessionService>>();
+                    logger.LogError(ex, "Background transcription failed for session {SessionId}.", sid);
+                }
+            });
+        }
 
         return MapToDto(session);
     }
@@ -347,9 +624,49 @@ public class SessionService : ISessionService
         return true;
     }
 
+    public async Task SetSpeechAnalysisAsync(Guid sessionId, string analysisJson, CancellationToken cancellationToken = default)
+    {
+        var session = await _sessionRepository.GetByIdAsync(sessionId, cancellationToken);
+        if (session == null) return;
+
+        session.SetSpeechAnalysis(analysisJson);
+        await _sessionRepository.UpdateAsync(session, cancellationToken);
+        await _sessionRepository.SaveChangesAsync(cancellationToken);
+    }
+
     private static SessionDto MapToDto(Session session)
     {
         var advice = BuildAdvice(session);
+
+        GeneralRatingsDto? generalRatings = null;
+        InterviewRatingsDto? interviewRatings = null;
+
+        if (session.Type == SessionType.Interview)
+        {
+            interviewRatings = new InterviewRatingsDto
+            {
+                Relevance = session.RatingRelevance,
+                SituationStakes = session.RatingSituationStakes,
+                Action = session.RatingAction,
+                ResultImpact = session.RatingResultImpact,
+                DeliveryComposure = session.RatingDeliveryComposure,
+                Conciseness = session.RatingConciseness
+            };
+        }
+        else
+        {
+            generalRatings = new GeneralRatingsDto
+            {
+                Opening = session.RatingOpening,
+                Structure = session.RatingStructure,
+                Ending = session.RatingEnding,
+                Confidence = session.RatingConfidence,
+                Clarity = session.RatingClarity,
+                Authenticity = session.RatingAuthenticity,
+                LanguageExpression = session.RatingLanguageExpression,
+                Passion = session.RatingPassion
+            };
+        }
 
         return new SessionDto
         {
@@ -358,6 +675,7 @@ public class SessionService : ISessionService
             CreatedAt = session.CreatedAt,
             CompletedAt = session.CompletedAt,
             Mode = session.Mode.ToString(),
+            Type = session.Type.ToString(),
             Language = session.Language.ToString().ToUpperInvariant(),
             Difficulty = session.Difficulty.ToString().ToUpperInvariant(),
             Word = session.Word,
@@ -365,17 +683,10 @@ public class SessionService : ISessionService
             SpeakSeconds = session.SpeakSeconds,
             Status = session.Status.ToString(),
             CancelReason = session.CancelReason?.ToString(),
-            Ratings = new SessionRatingsDto
-            {
-                Opening = session.RatingOpening,
-                Structure = session.RatingStructure,
-                Ending = session.RatingEnding,
-                Confidence = session.RatingConfidence,
-                Clarity = session.RatingClarity,
-                Authenticity = session.RatingAuthenticity,
-                LanguageExpression = session.RatingLanguageExpression
-            },
-            OverallScore = session.OverallScore,
+            Ratings = generalRatings,
+            InterviewRatings = interviewRatings,
+            ManualScore = CalculateManualScore(session),
+            AiScore = CalculateAiScore(session),
             Notes = session.Notes,
             Audio = new SessionAudioDto
             {
@@ -390,7 +701,14 @@ public class SessionService : ISessionService
                 UploadedAt = session.AudioUploadedAt
             },
             Transcript = session.Transcript,
-            Advice = advice
+            TranscriptionStatus = session.TranscriptionStatus,
+            TranscriptionError = session.TranscriptionError,
+            Advice = advice,
+            SpeechAnalysis = string.IsNullOrWhiteSpace(session.SpeechAnalysis)
+                ? null
+                : System.Text.Json.JsonSerializer.Deserialize<object>(session.SpeechAnalysis),
+            AnalyzedAt = session.AnalyzedAt,
+            AiScored = session.AiScored
         };
     }
 
@@ -400,13 +718,27 @@ public class SessionService : ISessionService
             return null;
 
         var rated = new List<RatedArea>();
-        AddRatedArea(rated, "opening", session.RatingOpening);
-        AddRatedArea(rated, "structure", session.RatingStructure);
-        AddRatedArea(rated, "ending", session.RatingEnding);
-        AddRatedArea(rated, "confidence", session.RatingConfidence);
-        AddRatedArea(rated, "clarity", session.RatingClarity);
-        AddRatedArea(rated, "authenticity", session.RatingAuthenticity);
-        AddRatedArea(rated, "languageExpression", session.RatingLanguageExpression);
+
+        if (session.Type == SessionType.Interview)
+        {
+            AddRatedArea(rated, "relevance", session.RatingRelevance, InterviewAdviceTemplates);
+            AddRatedArea(rated, "situationStakes", session.RatingSituationStakes, InterviewAdviceTemplates);
+            AddRatedArea(rated, "action", session.RatingAction, InterviewAdviceTemplates);
+            AddRatedArea(rated, "resultImpact", session.RatingResultImpact, InterviewAdviceTemplates);
+            AddRatedArea(rated, "deliveryComposure", session.RatingDeliveryComposure, InterviewAdviceTemplates);
+            AddRatedArea(rated, "conciseness", session.RatingConciseness, InterviewAdviceTemplates);
+        }
+        else
+        {
+            AddRatedArea(rated, "opening", session.RatingOpening);
+            AddRatedArea(rated, "structure", session.RatingStructure);
+            AddRatedArea(rated, "ending", session.RatingEnding);
+            AddRatedArea(rated, "confidence", session.RatingConfidence);
+            AddRatedArea(rated, "clarity", session.RatingClarity);
+            AddRatedArea(rated, "authenticity", session.RatingAuthenticity);
+            AddRatedArea(rated, "languageExpression", session.RatingLanguageExpression);
+            AddRatedArea(rated, "passion", session.RatingPassion);
+        }
 
         if (rated.Count == 0)
             return "Great session. Next time, add self-ratings so I can give you more precise advice.";
@@ -467,10 +799,12 @@ public class SessionService : ISessionService
         _ => PickMessage(weakest.Template.Polish, sessionId, $"{weakest.Key}:polish")
     };
 
-    private static void AddRatedArea(List<RatedArea> rated, string key, int? score)
+    private static void AddRatedArea(List<RatedArea> rated, string key, int? score,
+        IReadOnlyDictionary<string, AdviceTemplate>? templates = null)
     {
         if (!score.HasValue) return;
-        if (!AdviceTemplates.TryGetValue(key, out var template)) return;
+        templates ??= AdviceTemplates;
+        if (!templates.TryGetValue(key, out var template)) return;
         rated.Add(new RatedArea(key, score.Value, template));
     }
 
@@ -496,6 +830,88 @@ public class SessionService : ISessionService
 
             return (int)(hash % (uint)size);
         }
+    }
+
+    /// <summary>
+    /// Calculate manual score from self-rated criteria. Returns null if no ratings.
+    /// General: weighted sum * 2 on 0-10 scale + passion bonus (max 10.5).
+    /// Interview: weighted sum * 2 on 0-10 scale with gating (max 10).
+    /// </summary>
+    private static decimal? CalculateManualScore(Session session)
+    {
+        if (session.Type == SessionType.Interview)
+        {
+            if (!session.RatingRelevance.HasValue || !session.RatingSituationStakes.HasValue ||
+                !session.RatingAction.HasValue || !session.RatingResultImpact.HasValue ||
+                !session.RatingDeliveryComposure.HasValue || !session.RatingConciseness.HasValue)
+                return null;
+
+            var weighted =
+                session.RatingRelevance.Value * 0.20m +
+                session.RatingSituationStakes.Value * 0.15m +
+                session.RatingAction.Value * 0.30m +
+                session.RatingResultImpact.Value * 0.20m +
+                session.RatingDeliveryComposure.Value * 0.10m +
+                session.RatingConciseness.Value * 0.05m;
+
+            var score = weighted * 2m;
+            if (session.RatingRelevance.Value == 1)
+                score = Math.Min(score, 4.0m);
+
+            return Math.Round(score, 1);
+        }
+        else
+        {
+            if (!session.RatingOpening.HasValue || !session.RatingStructure.HasValue ||
+                !session.RatingEnding.HasValue || !session.RatingConfidence.HasValue ||
+                !session.RatingClarity.HasValue || !session.RatingAuthenticity.HasValue ||
+                !session.RatingLanguageExpression.HasValue)
+                return null;
+
+            var weighted =
+                session.RatingOpening.Value * 0.15m +
+                session.RatingStructure.Value * 0.20m +
+                session.RatingEnding.Value * 0.15m +
+                session.RatingConfidence.Value * 0.15m +
+                session.RatingClarity.Value * 0.15m +
+                session.RatingAuthenticity.Value * 0.10m +
+                session.RatingLanguageExpression.Value * 0.10m;
+
+            var score = weighted * 2m;
+            if (session.RatingPassion.HasValue)
+                score += session.RatingPassion.Value * 0.05m * 2m;
+
+            return Math.Min(Math.Round(score, 1), 10.5m);
+        }
+    }
+
+    /// <summary>
+    /// Extract AI score from stored SpeechAnalysis JSON. Returns null if no analysis.
+    /// Scales the AI total_score (out of 105 for general, 100 for interview) to 0-10.
+    /// </summary>
+    private static decimal? CalculateAiScore(Session session)
+    {
+        if (string.IsNullOrWhiteSpace(session.SpeechAnalysis))
+            return null;
+
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(session.SpeechAnalysis);
+            if (doc.RootElement.TryGetProperty("total_score", out var totalScoreElement))
+            {
+                var totalScore = totalScoreElement.GetDouble();
+                if (session.Type == SessionType.Interview)
+                    return Math.Round((decimal)totalScore / 10m, 1);
+                else
+                    return Math.Round((decimal)totalScore / 10.5m, 1);
+            }
+        }
+        catch
+        {
+            // SpeechAnalysis JSON might not have total_score yet
+        }
+
+        return null;
     }
 
     private static TEnum ParseEnum<TEnum>(string value) where TEnum : struct
