@@ -60,26 +60,37 @@ public class DeepSeekService : IDeepSeekService
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.ApiKey);
 
+        _logger.LogInformation("Calling DeepSeek for question generation (batch={Batch}, questionsPerBatch={Count})",
+            batchNumber, questionsPerBatch);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
         using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
             var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogError("DeepSeek API returned {StatusCode}: {Body}", response.StatusCode, errorBody);
+            _logger.LogError("DeepSeek API returned {StatusCode} after {ElapsedMs}ms: {Body}",
+                response.StatusCode, sw.ElapsedMilliseconds, errorBody);
             response.EnsureSuccessStatusCode();
         }
 
         await using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
         var chatResponse = await JsonSerializer.DeserializeAsync<DeepSeekChatResponse>(responseStream, JsonOptions, cancellationToken);
+        sw.Stop();
 
         var content = chatResponse?.Choices?.FirstOrDefault()?.Message?.Content;
         if (string.IsNullOrWhiteSpace(content))
         {
-            _logger.LogWarning("DeepSeek returned empty content for batch {Batch}.", batchNumber);
+            _logger.LogWarning("DeepSeek returned empty content for batch {Batch} after {ElapsedMs}ms",
+                batchNumber, sw.ElapsedMilliseconds);
             return new DeepSeekResponseDto([], "en", "Unknown");
         }
 
         var parsed = JsonSerializer.Deserialize<DeepSeekResponseDto>(content, JsonOptions);
+        var questionCount = parsed?.Questions.Count ?? 0;
+        _logger.LogInformation("DeepSeek question generation completed in {ElapsedMs}ms (batch={Batch}, questions={Count})",
+            sw.ElapsedMilliseconds, batchNumber, questionCount);
+
         return parsed ?? new DeepSeekResponseDto([], "en", "Unknown");
     }
 

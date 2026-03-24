@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MyApp.Application.Interfaces;
@@ -14,6 +15,7 @@ public class AssemblyAITranscriptionService : ITranscriptionService
     private readonly AssemblyAIOptions _options;
     private readonly IS3StorageService _s3StorageService;
     private readonly ISessionRepository _sessionRepository;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<AssemblyAITranscriptionService> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -27,12 +29,14 @@ public class AssemblyAITranscriptionService : ITranscriptionService
         IOptions<AssemblyAIOptions> options,
         IS3StorageService s3StorageService,
         ISessionRepository sessionRepository,
+        IServiceScopeFactory scopeFactory,
         ILogger<AssemblyAITranscriptionService> logger)
     {
         _httpClient = httpClient;
         _options = options.Value;
         _s3StorageService = s3StorageService;
         _sessionRepository = sessionRepository;
+        _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
@@ -42,6 +46,14 @@ public class AssemblyAITranscriptionService : ITranscriptionService
         string? languageCode,
         CancellationToken cancellationToken = default)
     {
+        // Fail fast if API key is not configured
+        if (string.IsNullOrWhiteSpace(_options.ApiKey))
+        {
+            _logger.LogError("AssemblyAI API key is not configured. Skipping transcription for session {SessionId}.", sessionId);
+            await UpdateSessionTranscriptionStatusAsync(sessionId, "Failed", "Transcription service not configured.", cancellationToken);
+            return;
+        }
+
         try
         {
             // Update status to Processing
@@ -63,7 +75,7 @@ public class AssemblyAITranscriptionService : ITranscriptionService
             // 3. Poll for completion
             var result = await PollForCompletionAsync(transcriptId, cancellationToken);
 
-            // 4. Store result on session
+            // 4. Store result on session (fresh load to avoid tracking conflicts)
             var session = await _sessionRepository.GetByIdAsync(sessionId, cancellationToken);
             if (session == null)
             {
@@ -90,9 +102,10 @@ public class AssemblyAITranscriptionService : ITranscriptionService
         {
             _logger.LogError(ex, "Transcription failed for session {SessionId}.", sessionId);
 
+            // Use a fresh scope to avoid entity tracking conflicts
             try
             {
-                await UpdateSessionTranscriptionStatusAsync(sessionId, "Failed", ex.Message, cancellationToken);
+                await UpdateSessionTranscriptionStatusFreshAsync(sessionId, "Failed", ex.Message);
             }
             catch (Exception innerEx)
             {
@@ -196,6 +209,26 @@ public class AssemblyAITranscriptionService : ITranscriptionService
             session.SetTranscriptionStatus(status, error);
             await _sessionRepository.UpdateAsync(session, cancellationToken);
             await _sessionRepository.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Uses a fresh DI scope to avoid entity tracking conflicts when the main scope's
+    /// DbContext already has the Session loaded.
+    /// </summary>
+    private async Task UpdateSessionTranscriptionStatusFreshAsync(
+        Guid sessionId,
+        string status,
+        string? error)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ISessionRepository>();
+        var session = await repo.GetByIdAsync(sessionId);
+        if (session != null)
+        {
+            session.SetTranscriptionStatus(status, error);
+            await repo.UpdateAsync(session);
+            await repo.SaveChangesAsync();
         }
     }
 

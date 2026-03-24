@@ -443,18 +443,33 @@ public class SessionService : ISessionService
             ])
     };
 
+    private static readonly TimeSpan AudioUrlTtl = TimeSpan.FromMinutes(15);
+    private const int MaxAiAnalysesPerDay = 3;
+
     private readonly ISessionRepository _sessionRepository;
     private readonly IUserRepository _userRepository;
+    private readonly IS3StorageService _s3StorageService;
+    private readonly ISpeechAnalysisService _speechAnalysisService;
+    private readonly ITranscriptionService _transcriptionService;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ILogger<SessionService> _logger;
 
     public SessionService(
         ISessionRepository sessionRepository,
         IUserRepository userRepository,
-        IServiceScopeFactory scopeFactory)
+        IS3StorageService s3StorageService,
+        ISpeechAnalysisService speechAnalysisService,
+        ITranscriptionService transcriptionService,
+        IServiceScopeFactory scopeFactory,
+        ILogger<SessionService> logger)
     {
         _sessionRepository = sessionRepository;
         _userRepository = userRepository;
+        _s3StorageService = s3StorageService;
+        _speechAnalysisService = speechAnalysisService;
+        _transcriptionService = transcriptionService;
         _scopeFactory = scopeFactory;
+        _logger = logger;
     }
 
     public async Task<SessionDto> CreateSessionAsync(
@@ -550,6 +565,9 @@ public class SessionService : ISessionService
         await _sessionRepository.AddAsync(session, cancellationToken);
         await _sessionRepository.SaveChangesAsync(cancellationToken);
 
+        _logger.LogInformation("Session {SessionId} created for user {UserId} (type={Type}, mode={Mode}, status={Status})",
+            session.Id, userId, sessionType, mode, status);
+
         // Trigger server-side transcription if audio is available and no client transcript was provided
         if (session.AudioAvailable
             && !string.IsNullOrWhiteSpace(session.AudioObjectKey)
@@ -577,6 +595,9 @@ public class SessionService : ISessionService
             await _sessionRepository.UpdateAsync(session, cancellationToken);
             await _sessionRepository.SaveChangesAsync(cancellationToken);
 
+            _logger.LogInformation("Queuing background transcription for session {SessionId} (lang={Language})",
+                session.Id, langCode ?? "auto");
+
             var audioKey = session.AudioObjectKey;
             var sid = session.Id;
             var lang = langCode;
@@ -586,16 +607,197 @@ public class SessionService : ISessionService
                 {
                     using var scope = _scopeFactory.CreateScope();
                     var transcriptionService = scope.ServiceProvider.GetRequiredService<ITranscriptionService>();
+                    var sessionRepo = scope.ServiceProvider.GetRequiredService<ISessionRepository>();
+                    var bgLogger = scope.ServiceProvider.GetRequiredService<ILogger<SessionService>>();
+
+                    bgLogger.LogInformation("Starting transcription for session {SessionId}", sid);
                     await transcriptionService.TranscribeSessionAsync(sid, audioKey, lang);
+
+                    // Check actual outcome — the transcription service handles its own errors internally
+                    var updated = await sessionRepo.GetByIdAsync(sid);
+                    if (updated?.TranscriptionStatus == "Completed")
+                    {
+                        bgLogger.LogInformation("Transcription completed for session {SessionId} ({Length} chars)",
+                            sid, updated.Transcript?.Length ?? 0);
+                    }
+                    else
+                    {
+                        bgLogger.LogWarning("Transcription finished with status {Status} for session {SessionId}: {Error}",
+                            updated?.TranscriptionStatus ?? "Unknown", sid, updated?.TranscriptionError ?? "no details");
+                    }
                 }
                 catch (Exception ex)
                 {
                     using var scope = _scopeFactory.CreateScope();
-                    var logger = scope.ServiceProvider.GetRequiredService<ILogger<SessionService>>();
-                    logger.LogError(ex, "Background transcription failed for session {SessionId}.", sid);
+                    var bgLogger = scope.ServiceProvider.GetRequiredService<ILogger<SessionService>>();
+                    bgLogger.LogError(ex, "Background transcription failed for session {SessionId}", sid);
                 }
             });
         }
+
+        return MapToDto(session);
+    }
+
+    public async Task<SessionDto> CreateSessionWithAudioAsync(
+        Guid userId,
+        CreateSessionRequest request,
+        Stream audioStream,
+        string fileName,
+        string contentType,
+        long fileSize,
+        CancellationToken cancellationToken = default)
+    {
+        // Buffer audio so we can use it for both S3 upload and transcription
+        var buffer = new MemoryStream();
+        await audioStream.CopyToAsync(buffer, cancellationToken);
+
+        _logger.LogInformation(
+            "Creating session with audio for user {UserId} (file={FileName}, contentType={ContentType}, size={Size})",
+            userId, fileName, contentType, fileSize);
+
+        // Determine language code for transcription
+        string? langCode = null;
+        var sessionType = string.IsNullOrWhiteSpace(request.Type)
+            ? SessionType.General
+            : ParseEnum<SessionType>(request.Type);
+
+        if (sessionType == SessionType.Interview)
+        {
+            var user = await _userRepository.GetByIdAsync(userId, cancellationToken);
+            langCode = user?.ResumeLanguage;
+        }
+        else
+        {
+            var language = ParseEnum<SessionLanguage>(request.Language);
+            langCode = language switch
+            {
+                SessionLanguage.En => "en",
+                SessionLanguage.Fr => "fr",
+                SessionLanguage.Ar => "ar",
+                _ => null
+            };
+        }
+
+        // Run S3 upload and Deepgram transcription in parallel
+        buffer.Position = 0;
+        var s3Stream = new MemoryStream(buffer.GetBuffer(), 0, (int)buffer.Length, writable: false);
+
+        buffer.Position = 0;
+        var transcriptionStream = new MemoryStream(buffer.GetBuffer(), 0, (int)buffer.Length, writable: false);
+
+        _logger.LogInformation("Starting parallel S3 upload + transcription for user {UserId}", userId);
+
+        var s3Task = _s3StorageService.UploadAudioAsync(
+            userId, s3Stream, fileName, contentType, fileSize, cancellationToken);
+
+        var transcribeTask = _transcriptionService.TranscribeAudioAsync(
+            transcriptionStream, contentType, langCode, cancellationToken);
+
+        // Wait for S3 upload (required) and transcription (best-effort) in parallel
+        // Transcription failure must NOT prevent session creation
+        try
+        {
+            await Task.WhenAll(s3Task, transcribeTask);
+        }
+        catch
+        {
+            // If transcription failed, ensure S3 upload still completed
+            await s3Task;
+        }
+
+        var s3Result = await s3Task;
+
+        string? transcript = null;
+        try
+        {
+            transcript = await transcribeTask;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Inline transcription failed for user {UserId}, session will be created without transcript. " +
+                "Background transcription will be triggered automatically",
+                userId);
+        }
+
+        _logger.LogInformation(
+            "Parallel upload+transcription done for user {UserId}: s3Key={ObjectKey}, transcriptLength={TranscriptLength}",
+            userId, s3Result.ObjectKey, transcript?.Length ?? 0);
+
+        // Set audio metadata on the request so CreateSessionAsync stores it
+        request.Audio = new SessionAudioDto
+        {
+            Available = true,
+            ObjectKey = s3Result.ObjectKey,
+            BucketName = s3Result.BucketName,
+            Region = s3Result.Region,
+            UploadedAt = DateTime.UtcNow,
+            DurationMs = request.Audio?.DurationMs,
+            RecordingStartedAt = request.Audio?.RecordingStartedAt,
+            RecordingEndedAt = request.Audio?.RecordingEndedAt,
+            ErrorCode = null
+        };
+
+        // Set transcript so CreateSessionAsync stores it (and skips background transcription)
+        request.Transcript = transcript;
+
+        return await CreateSessionAsync(userId, request, cancellationToken);
+    }
+
+    public async Task<SessionDto?> UpdateSessionAsync(
+        Guid sessionId, Guid userId, UpdateSessionRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var session = await _sessionRepository.GetByIdAsync(sessionId, cancellationToken);
+        if (session == null)
+            return null;
+
+        if (session.UserId != userId)
+            return null;
+
+        if (!string.IsNullOrWhiteSpace(request.Status))
+        {
+            var status = ParseEnum<SessionStatus>(request.Status);
+            var cancelReason = string.IsNullOrEmpty(request.CancelReason)
+                ? (CancelReason?)null
+                : ParseEnum<CancelReason>(request.CancelReason);
+            session.SetStatus(status, cancelReason);
+        }
+
+        if (request.CompletedAt.HasValue)
+            session.SetCompletedAt(request.CompletedAt.Value);
+
+        if (session.Type == SessionType.Interview && request.InterviewRatings != null)
+        {
+            session.SetInterviewRatings(
+                request.InterviewRatings.Relevance,
+                request.InterviewRatings.SituationStakes,
+                request.InterviewRatings.Action,
+                request.InterviewRatings.ResultImpact,
+                request.InterviewRatings.DeliveryComposure,
+                request.InterviewRatings.Conciseness);
+        }
+        else if (request.Ratings != null)
+        {
+            session.SetGeneralRatings(
+                request.Ratings.Opening,
+                request.Ratings.Structure,
+                request.Ratings.Ending,
+                request.Ratings.Confidence,
+                request.Ratings.Clarity,
+                request.Ratings.Authenticity,
+                request.Ratings.LanguageExpression,
+                request.Ratings.Passion);
+        }
+
+        if (request.Notes != null)
+            session.SetNotes(request.Notes);
+
+        await _sessionRepository.UpdateAsync(session, cancellationToken);
+        await _sessionRepository.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("Session {SessionId} updated (status={Status})",
+            sessionId, session.Status);
 
         return MapToDto(session);
     }
@@ -621,6 +823,7 @@ public class SessionService : ISessionService
         }
 
         await _sessionRepository.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation("Session {SessionId} deleted", sessionId);
         return true;
     }
 
@@ -632,6 +835,149 @@ public class SessionService : ISessionService
         session.SetSpeechAnalysis(analysisJson);
         await _sessionRepository.UpdateAsync(session, cancellationToken);
         await _sessionRepository.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<SessionAnalysisResult> AnalyzeSessionAsync(
+        Guid sessionId, Guid userId, bool reanalyze = false,
+        CancellationToken cancellationToken = default)
+    {
+        var session = await _sessionRepository.GetByIdAsync(sessionId, cancellationToken);
+        if (session == null)
+        {
+            return new SessionAnalysisResult
+            {
+                Success = false,
+                Error = "session_not_found",
+                ErrorMessage = "Session not found.",
+                HttpStatus = 404
+            };
+        }
+
+        if (session.UserId != userId)
+        {
+            return new SessionAnalysisResult
+            {
+                Success = false,
+                Error = "forbidden",
+                ErrorMessage = "Access denied.",
+                HttpStatus = 403
+            };
+        }
+
+        // Return cached analysis if available and not forcing reanalysis
+        if (!reanalyze && !string.IsNullOrWhiteSpace(session.SpeechAnalysis))
+        {
+            _logger.LogInformation("Returning cached analysis for session {SessionId}", sessionId);
+            return new SessionAnalysisResult
+            {
+                Success = true,
+                Analysis = BuildAnalysisResult(session)
+            };
+        }
+
+        // Rate limit: max N AI analyses per day
+        var analysesToday = await _sessionRepository.CountAiAnalysesTodayAsync(userId, cancellationToken);
+        if (analysesToday >= MaxAiAnalysesPerDay)
+        {
+            _logger.LogWarning("Analysis rate-limited for user {UserId}: {Used}/{Max} today",
+                userId, analysesToday, MaxAiAnalysesPerDay);
+            return new SessionAnalysisResult
+            {
+                Success = false,
+                RateLimited = true,
+                Error = "daily_analysis_limit",
+                ErrorMessage = $"You have reached the limit of {MaxAiAnalysesPerDay} AI analyses per day.",
+                AnalysesUsed = analysesToday,
+                MaxPerDay = MaxAiAnalysesPerDay,
+                ResetsAt = DateTime.UtcNow.Date.AddDays(1),
+                HttpStatus = 429
+            };
+        }
+
+        if (string.IsNullOrWhiteSpace(session.Transcript))
+        {
+            return new SessionAnalysisResult
+            {
+                Success = false,
+                Error = "no_transcript",
+                ErrorMessage = "Session has no transcript to analyze. Wait for transcription to complete or provide a transcript.",
+                HttpStatus = 400
+            };
+        }
+
+        _logger.LogInformation("Starting AI analysis for session {SessionId} (type={Type}, transcript length={Length})",
+            sessionId, session.Type, session.Transcript.Length);
+
+        string analysisJson;
+        var result = new SpeechAnalysisResultDto { SessionType = session.Type.ToString() };
+
+        if (session.Type == SessionType.Interview)
+        {
+            var analysis = await _speechAnalysisService.AnalyzeInterviewSpeechAsync(
+                session.Word, session.Transcript, cancellationToken);
+            result.InterviewAnalysis = analysis;
+            analysisJson = System.Text.Json.JsonSerializer.Serialize(analysis);
+        }
+        else
+        {
+            var analysis = await _speechAnalysisService.AnalyzeGeneralSpeechAsync(
+                session.Transcript, cancellationToken);
+            result.GeneralAnalysis = analysis;
+            analysisJson = System.Text.Json.JsonSerializer.Serialize(analysis);
+        }
+
+        // Store analysis on the session
+        session.SetSpeechAnalysis(analysisJson);
+        await _sessionRepository.UpdateAsync(session, cancellationToken);
+        await _sessionRepository.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("AI analysis completed and stored for session {SessionId}", sessionId);
+
+        return new SessionAnalysisResult
+        {
+            Success = true,
+            Analysis = result
+        };
+    }
+
+    public async Task<AudioPlaybackUrlDto?> GetAudioUrlAsync(
+        Guid sessionId, CancellationToken cancellationToken = default)
+    {
+        var session = await _sessionRepository.GetByIdAsync(sessionId, cancellationToken);
+        if (session == null)
+            return null;
+
+        var objectKey = session.AudioObjectKey;
+        if (string.IsNullOrWhiteSpace(objectKey))
+            return null;
+
+        _logger.LogInformation("Generating pre-signed audio URL for session {SessionId}", sessionId);
+
+        var url = await _s3StorageService.GetPreSignedGetUrlAsync(objectKey, AudioUrlTtl, cancellationToken);
+        return new AudioPlaybackUrlDto
+        {
+            Url = url,
+            ExpiresAt = DateTime.UtcNow.Add(AudioUrlTtl)
+        };
+    }
+
+    private static SpeechAnalysisResultDto BuildAnalysisResult(Session session)
+    {
+        var sessionType = session.Type.ToString();
+        var result = new SpeechAnalysisResultDto { SessionType = sessionType };
+
+        if (session.Type == SessionType.Interview)
+        {
+            result.InterviewAnalysis = System.Text.Json.JsonSerializer.Deserialize<InterviewSpeechAnalysisDto>(
+                session.SpeechAnalysis!);
+        }
+        else
+        {
+            result.GeneralAnalysis = System.Text.Json.JsonSerializer.Deserialize<GeneralSpeechAnalysisDto>(
+                session.SpeechAnalysis!);
+        }
+
+        return result;
     }
 
     private static SessionDto MapToDto(Session session)

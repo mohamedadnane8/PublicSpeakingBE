@@ -128,6 +128,7 @@ builder.Services.AddInfrastructure(builder.Configuration);
 // Add Application services
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ISessionService, SessionService>();
+builder.Services.AddScoped<IResumeService, ResumeService>();
 builder.Services.AddScoped<IWordService, WordService>();
 builder.Services.AddScoped<IFeatureRequestService, FeatureRequestService>();
 builder.Services.AddSingleton<IBehavioralQuestionService, BehavioralQuestionService>();

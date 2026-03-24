@@ -81,6 +81,8 @@ public class S3StorageService : IS3StorageService
 
         await _s3Client.PutObjectAsync(putRequest, cancellationToken);
 
+        _logger.LogInformation("Audio uploaded to S3 successfully. Key: {Key}, Size: {Size} bytes", objectKey, fileSize);
+
         return new AudioUploadResultDto
         {
             ObjectKey = objectKey,

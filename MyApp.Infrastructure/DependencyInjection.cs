@@ -88,7 +88,8 @@ public static class DependencyInjection
         });
 
         // Resume upload rate limiting
-        services.Configure<ResumeUploadOptions>(configuration.GetSection(ResumeUploadOptions.SectionName));
+        services.Configure<Application.Configuration.ResumeUploadOptions>(
+            configuration.GetSection(Application.Configuration.ResumeUploadOptions.SectionName));
 
         // Speech Analysis (reuses DeepSeek config)
         services.AddHttpClient<ISpeechAnalysisService, SpeechAnalysisService>(client =>
@@ -96,12 +97,25 @@ public static class DependencyInjection
             client.Timeout = TimeSpan.FromMinutes(3);
         });
 
-        // AssemblyAI Transcription
-        services.Configure<AssemblyAIOptions>(configuration.GetSection(AssemblyAIOptions.SectionName));
-        services.AddHttpClient<ITranscriptionService, AssemblyAITranscriptionService>(client =>
+        // Transcription — choose provider via Transcription:Provider ("Deepgram" or "AssemblyAI")
+        var transcriptionProvider = configuration["Transcription:Provider"] ?? "Deepgram";
+
+        if (transcriptionProvider.Equals("Deepgram", StringComparison.OrdinalIgnoreCase))
         {
-            client.Timeout = TimeSpan.FromMinutes(15);
-        });
+            services.Configure<DeepgramOptions>(configuration.GetSection(DeepgramOptions.SectionName));
+            services.AddHttpClient<ITranscriptionService, DeepgramTranscriptionService>(client =>
+            {
+                client.Timeout = TimeSpan.FromMinutes(3);
+            });
+        }
+        else
+        {
+            services.Configure<AssemblyAIOptions>(configuration.GetSection(AssemblyAIOptions.SectionName));
+            services.AddHttpClient<ITranscriptionService, AssemblyAITranscriptionService>(client =>
+            {
+                client.Timeout = TimeSpan.FromMinutes(15);
+            });
+        }
 
         return services;
     }

@@ -268,21 +268,29 @@ public class SpeechAnalysisService : ISpeechAnalysisService
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.ApiKey);
 
+        _logger.LogInformation("Calling DeepSeek for speech analysis (prompt length={Length})", prompt.Length);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
         using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
             var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogError("DeepSeek speech analysis returned {StatusCode}: {Body}", response.StatusCode, errorBody);
+            _logger.LogError("DeepSeek speech analysis returned {StatusCode} after {ElapsedMs}ms: {Body}",
+                response.StatusCode, sw.ElapsedMilliseconds, errorBody);
             response.EnsureSuccessStatusCode();
         }
 
         await using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
         var chatResponse = await JsonSerializer.DeserializeAsync<ChatResponse>(responseStream, JsonOptions, cancellationToken);
+        sw.Stop();
 
         var content = chatResponse?.Choices?.FirstOrDefault()?.Message?.Content;
         if (string.IsNullOrWhiteSpace(content))
             throw new InvalidOperationException("DeepSeek returned empty content for speech analysis.");
+
+        _logger.LogInformation("DeepSeek speech analysis completed in {ElapsedMs}ms (response length={Length})",
+            sw.ElapsedMilliseconds, content.Length);
 
         return content;
     }
