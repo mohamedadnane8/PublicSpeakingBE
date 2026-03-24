@@ -50,7 +50,7 @@ echo -e "${GREEN}Cleaning unused images...${NC}"
 docker image prune -f
 
 echo -e "${GREEN}Building and starting containers...${NC}"
-$COMPOSE_CMD up -d --build
+$COMPOSE_CMD up -d --build --force-recreate
 
 # Run database migrations
 echo -e "${GREEN}Running database migrations...${NC}"
