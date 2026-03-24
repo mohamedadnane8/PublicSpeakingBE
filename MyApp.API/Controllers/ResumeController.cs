@@ -33,6 +33,8 @@ public class ResumeController : ControllerBase
     private readonly IResumeParserService _resumeParserService;
     private readonly IDeepSeekService _deepSeekService;
     private readonly IInterviewQuestionRepository _questionRepository;
+    private readonly IUserRepository _userRepository;
+    private readonly IBehavioralQuestionService _behavioralQuestionService;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ResumeUploadOptions _uploadOptions;
     private readonly ILogger<ResumeController> _logger;
@@ -41,6 +43,8 @@ public class ResumeController : ControllerBase
         IResumeParserService resumeParserService,
         IDeepSeekService deepSeekService,
         IInterviewQuestionRepository questionRepository,
+        IUserRepository userRepository,
+        IBehavioralQuestionService behavioralQuestionService,
         IServiceScopeFactory scopeFactory,
         IOptions<ResumeUploadOptions> uploadOptions,
         ILogger<ResumeController> logger)
@@ -48,6 +52,8 @@ public class ResumeController : ControllerBase
         _resumeParserService = resumeParserService;
         _deepSeekService = deepSeekService;
         _questionRepository = questionRepository;
+        _userRepository = userRepository;
+        _behavioralQuestionService = behavioralQuestionService;
         _scopeFactory = scopeFactory;
         _uploadOptions = uploadOptions.Value;
         _logger = logger;
@@ -108,20 +114,27 @@ public class ResumeController : ControllerBase
             return Unauthorized(new { error = "unauthorized", message = "User is not authenticated." });
         }
 
-        // Check upload rate limit
-        var lastUpload = await _questionRepository.GetLatestUploadDateAsync(userId, cancellationToken);
-        if (lastUpload.HasValue)
+        // Check weekly upload limit
+        var user = await _userRepository.GetByIdAsync(userId, cancellationToken);
+        if (user != null)
         {
-            var cooldown = TimeSpan.FromHours(_uploadOptions.UploadCooldownHours);
-            var nextAllowed = lastUpload.Value.Add(cooldown);
-            if (DateTime.UtcNow < nextAllowed)
+            var weekStart = DateTime.UtcNow.AddDays(-7);
+            var uploadsThisWeek = user.ResumeUploadHistory.Count(d => d >= weekStart);
+            if (uploadsThisWeek >= _uploadOptions.MaxUploadsPerWeek)
             {
-                var remaining = nextAllowed - DateTime.UtcNow;
+                var oldestThisWeek = user.ResumeUploadHistory
+                    .Where(d => d >= weekStart)
+                    .OrderBy(d => d)
+                    .First();
+                var nextSlotAt = oldestThisWeek.AddDays(7);
+
                 return StatusCode(StatusCodes.Status429TooManyRequests, new
                 {
-                    error = "upload_cooldown",
-                    message = $"You can upload a new resume in {remaining.Hours}h {remaining.Minutes}m.",
-                    nextAllowedAt = nextAllowed
+                    error = "weekly_limit_reached",
+                    message = $"You have reached the limit of {_uploadOptions.MaxUploadsPerWeek} resume uploads per week.",
+                    uploadsUsed = uploadsThisWeek,
+                    maxUploadsPerWeek = _uploadOptions.MaxUploadsPerWeek,
+                    nextSlotAt
                 });
             }
         }
@@ -155,10 +168,10 @@ public class ResumeController : ControllerBase
             var questionsPerBatch = _uploadOptions.QuestionsPerBatch;
 
             // Batch 1: generate first batch synchronously
-            var batch1 = await _deepSeekService.GenerateInterviewQuestionsAsync(
+            var batch1Response = await _deepSeekService.GenerateInterviewQuestionsAsync(
                 content, batchNumber: 1, questionsPerBatch: questionsPerBatch, cancellationToken);
 
-            if (batch1.Count == 0)
+            if (batch1Response.Questions.Count == 0)
             {
                 return StatusCode(StatusCodes.Status502BadGateway, new
                 {
@@ -167,14 +180,29 @@ public class ResumeController : ControllerBase
                 });
             }
 
-            var questions = MapAndCreateEntities(userId, batch1);
+            var detectedLanguage = batch1Response.Language ?? "en";
+            var detectedField = batch1Response.Field;
+
+            var questions = MapAndCreateEntities(userId, batch1Response.Questions, detectedLanguage);
             await _questionRepository.AddRangeAsync(questions, cancellationToken);
             await _questionRepository.SaveChangesAsync(cancellationToken);
+
+            // Update user: record upload, language, and field
+            user = await _userRepository.GetByIdAsync(userId, cancellationToken);
+            if (user != null)
+            {
+                user.RecordResumeUpload();
+                user.SetResumeLanguage(detectedLanguage);
+                user.SetDetectedField(detectedField);
+                await _userRepository.UpdateAsync(user, cancellationToken);
+                await _userRepository.SaveChangesAsync(cancellationToken);
+            }
 
             // Batch 2: fire in background if enabled
             if (_uploadOptions.EnableSecondBatch)
             {
                 var resumeText = content;
+                var lang = detectedLanguage;
                 _ = Task.Run(async () =>
                 {
                     try
@@ -184,12 +212,12 @@ public class ResumeController : ControllerBase
                         var repo = scope.ServiceProvider.GetRequiredService<IInterviewQuestionRepository>();
                         var logger = scope.ServiceProvider.GetRequiredService<ILogger<ResumeController>>();
 
-                        var batch2 = await deepSeek.GenerateInterviewQuestionsAsync(
+                        var batch2Response = await deepSeek.GenerateInterviewQuestionsAsync(
                             resumeText, batchNumber: 2, questionsPerBatch: questionsPerBatch);
 
-                        if (batch2.Count > 0)
+                        if (batch2Response.Questions.Count > 0)
                         {
-                            var batch2Questions = MapAndCreateEntities(userId, batch2);
+                            var batch2Questions = MapAndCreateEntities(userId, batch2Response.Questions, lang);
                             await repo.AddRangeAsync(batch2Questions);
                             await repo.SaveChangesAsync();
                             logger.LogInformation("Batch 2: stored {Count} questions for user {UserId}.", batch2Questions.Count, userId);
@@ -209,7 +237,9 @@ public class ResumeController : ControllerBase
                 FileName: file.FileName,
                 ContentType: file.ContentType ?? normalizedContentType,
                 PageCount: extension == ".pdf" ? CountPdfPages(memoryStream) : 1,
-                QuestionsGenerated: questions.Count
+                QuestionsGenerated: questions.Count,
+                DetectedLanguage: detectedLanguage,
+                DetectedField: detectedField
             );
 
             return Ok(result);
@@ -259,6 +289,7 @@ public class ResumeController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<InterviewQuestionDto>> GetRandomQuestion(
         [FromQuery] string? difficulty,
+        [FromQuery] string? category,
         CancellationToken cancellationToken)
     {
         Guid userId;
@@ -288,7 +319,7 @@ public class ResumeController : ControllerBase
             }
         }
 
-        var question = await _questionRepository.GetRandomByUserIdAsync(userId, parsedDifficulty, cancellationToken);
+        var question = await _questionRepository.GetRandomByUserIdAsync(userId, parsedDifficulty, category, cancellationToken);
 
         if (question == null)
         {
@@ -309,7 +340,29 @@ public class ResumeController : ControllerBase
         ));
     }
 
-    private static List<InterviewQuestion> MapAndCreateEntities(Guid userId, List<GeneratedQuestionDto> generated)
+    [HttpGet("questions/behavioral/random")]
+    [ProducesResponseType(typeof(BehavioralQuestionDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public ActionResult<BehavioralQuestionDto> GetRandomBehavioralQuestion(
+        [FromQuery] string? language,
+        [FromQuery] string? difficulty)
+    {
+        var question = _behavioralQuestionService.GetRandomQuestion(language, difficulty);
+
+        if (question == null)
+        {
+            return NotFound(new
+            {
+                error = "no_behavioral_questions",
+                message = "No behavioral questions available for the specified language and difficulty."
+            });
+        }
+
+        return Ok(question);
+    }
+
+    private static List<InterviewQuestion> MapAndCreateEntities(Guid userId, List<GeneratedQuestionDto> generated, string language)
     {
         return generated.Select(q =>
         {
@@ -330,7 +383,7 @@ public class ResumeController : ControllerBase
                 _ => 90
             };
 
-            return InterviewQuestion.Create(userId, q.Question, q.Category, difficulty, thinkingSeconds, answeringSeconds);
+            return InterviewQuestion.Create(userId, q.Question, q.Category, difficulty, thinkingSeconds, answeringSeconds, language);
         }).ToList();
     }
 

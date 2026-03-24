@@ -23,6 +23,7 @@ public class InterviewQuestionRepository : IInterviewQuestionRepository
     public async Task<InterviewQuestion?> GetRandomByUserIdAsync(
         Guid userId,
         QuestionDifficulty? difficulty = null,
+        string? category = null,
         CancellationToken cancellationToken = default)
     {
         var query = _context.InterviewQuestions
@@ -32,6 +33,11 @@ public class InterviewQuestionRepository : IInterviewQuestionRepository
         if (difficulty.HasValue)
         {
             query = query.Where(q => q.Difficulty == difficulty.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(category))
+        {
+            query = query.Where(q => q.Category == category);
         }
 
         return await query

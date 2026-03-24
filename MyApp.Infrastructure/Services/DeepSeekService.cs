@@ -32,7 +32,7 @@ public class DeepSeekService : IDeepSeekService
         _logger = logger;
     }
 
-    public async Task<List<GeneratedQuestionDto>> GenerateInterviewQuestionsAsync(
+    public async Task<DeepSeekResponseDto> GenerateInterviewQuestionsAsync(
         string resumeText,
         int batchNumber,
         int questionsPerBatch,
@@ -48,7 +48,7 @@ public class DeepSeekService : IDeepSeekService
                 new { role = "system", content = "You are an expert interviewer and career coach. You analyze resumes and generate tailored interview questions." },
                 new { role = "user", content = prompt }
             },
-            temperature = 0.7 + (batchNumber * 0.05),
+            temperature = 0.5 + (batchNumber * 0.05),
             max_tokens = 8192,
             response_format = new { type = "json_object" }
         };
@@ -76,11 +76,11 @@ public class DeepSeekService : IDeepSeekService
         if (string.IsNullOrWhiteSpace(content))
         {
             _logger.LogWarning("DeepSeek returned empty content for batch {Batch}.", batchNumber);
-            return [];
+            return new DeepSeekResponseDto([], "en", "Unknown");
         }
 
-        var questionsWrapper = JsonSerializer.Deserialize<QuestionsWrapper>(content, JsonOptions);
-        return questionsWrapper?.Questions ?? [];
+        var parsed = JsonSerializer.Deserialize<DeepSeekResponseDto>(content, JsonOptions);
+        return parsed ?? new DeepSeekResponseDto([], "en", "Unknown");
     }
 
     private static string BuildPrompt(string resumeText, int batchNumber, int count)
@@ -88,31 +88,45 @@ public class DeepSeekService : IDeepSeekService
         var batchInstruction = batchNumber switch
         {
             1 => $"Generate exactly {count} interview questions (batch 1: focus on technical skills, domain knowledge, and problem solving).",
-            2 => $"Generate exactly {count} NEW and DIFFERENT interview questions (batch 2: focus on behavioral, situational, leadership, and communication). Do NOT repeat questions from a typical first batch.",
+            2 => $"Generate exactly {count} NEW and DIFFERENT interview questions (batch 2: focus on situational, leadership, and communication). Do NOT repeat questions from a typical first batch.",
             _ => $"Generate exactly {count} interview questions."
         };
 
         return $$"""
-            Analyze this resume. {{batchInstruction}}
+            You are a senior hiring manager conducting a real interview. Analyze this resume and generate {{count}} interview questions.
 
-            CRITICAL: Detect the resume language and write ALL questions in that SAME language.
+            {{batchInstruction}}
 
-            Rules:
-            - Infer career level (junior/mid/senior) from the resume
+            CRITICAL RULES:
+            1. Detect the resume language and write ALL questions in that SAME language.
+            2. DO NOT generate generic behavioral questions (e.g., "Tell me about a time...") — those are handled separately.
+            3. Every question MUST reference specific details from the resume: company names, technologies, projects, metrics, or job titles mentioned.
+            4. Questions should sound like a real interviewer who has READ the resume, not generic template questions.
+            5. Ask follow-up style questions that probe deeper into claimed achievements (e.g., "You mentioned reducing API response times by 60% at StartupXYZ — walk me through the specific optimizations you applied").
+            6. For technical questions, ask about real-world tradeoffs and decisions, not textbook definitions.
+            7. Include questions that challenge or verify specific claims in the resume.
+            8. ANTI-HALLUCINATION: Only reference facts explicitly stated in the resume. Do NOT infer, invent, or assume projects, metrics, technologies, or achievements that are not mentioned. If the resume is vague about a detail, ask the candidate to elaborate — do not fill in the blanks yourself.
+
+            Difficulty distribution (infer career level from resume):
             - Junior: 40% Easy, 40% Medium, 20% Hard
             - Mid: 25% Easy, 50% Medium, 25% Hard
             - Senior: 15% Easy, 35% Medium, 50% Hard
-            - Categories: Technical, Behavioral, Situational, Domain Knowledge, Problem Solving, Leadership, Communication
-            - "ts" = thinking time in seconds, "as" = answer time in seconds
+
+            Categories: Technical, Situational, Domain Knowledge, Problem Solving, Leadership, Communication
+            Timing: ts = thinking seconds, as = answering seconds
             - Easy: ts 15-30, as 30-60. Medium: ts 30-60, as 60-120. Hard: ts 45-90, as 90-180
+
+            Also detect:
+            - The resume's language code (e.g. "en", "fr", "ar")
+            - The candidate's professional field (e.g. "Software Engineering", "Data Science")
 
             Resume:
             {{resumeText}}
 
-            JSON format (use short keys to save space):
-            {"questions":[{"q":"question text","c":"Technical","d":"Easy","ts":20,"as":45}]}
+            JSON format:
+            {"questions":[{"q":"question text","c":"Technical","d":"Easy","ts":20,"as":45}],"language":"en","field":"Software Engineering"}
 
-            d must be "Easy", "Medium", or "Hard". Exactly {{count}} items.
+            d must be "Easy", "Medium", or "Hard". Exactly {{count}} question items.
             """;
     }
 
@@ -129,10 +143,5 @@ public class DeepSeekService : IDeepSeekService
     private class Message
     {
         public string? Content { get; set; }
-    }
-
-    private class QuestionsWrapper
-    {
-        public List<GeneratedQuestionDto>? Questions { get; set; }
     }
 }

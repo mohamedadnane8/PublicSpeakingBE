@@ -4,7 +4,7 @@ namespace MyApp.Application.Interfaces;
 
 public interface IDeepSeekService
 {
-    Task<List<GeneratedQuestionDto>> GenerateInterviewQuestionsAsync(
+    Task<DeepSeekResponseDto> GenerateInterviewQuestionsAsync(
         string resumeText,
         int batchNumber,
         int questionsPerBatch,
