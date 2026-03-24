@@ -8,4 +8,5 @@ public interface ISessionService
     Task<SessionDto?> GetSessionAsync(Guid sessionId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SessionDto>> GetUserSessionsAsync(Guid userId, CancellationToken cancellationToken = default);
     Task<bool> DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default);
+    Task SetSpeechAnalysisAsync(Guid sessionId, string analysisJson, CancellationToken cancellationToken = default);
 }

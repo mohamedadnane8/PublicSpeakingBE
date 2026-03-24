@@ -55,6 +55,14 @@ public class SessionRepository : ISessionRepository
         return true;
     }
 
+    public async Task<int> CountAiAnalysesTodayAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var todayStart = DateTime.UtcNow.Date;
+        return await _context.Sessions
+            .Where(s => s.UserId == userId && s.AnalyzedAt != null && s.AnalyzedAt >= todayStart)
+            .CountAsync(cancellationToken);
+    }
+
     public async Task SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         await _context.SaveChangesAsync(cancellationToken);

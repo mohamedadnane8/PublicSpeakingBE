@@ -25,6 +25,7 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<Session>(entity =>
         {
             entity.Property(e => e.Mode).HasConversion<string>();
+            entity.Property(e => e.Type).HasConversion<string>().HasMaxLength(20).HasDefaultValue(SessionType.General);
             entity.Property(e => e.Language).HasConversion<string>();
             entity.Property(e => e.Difficulty).HasConversion<string>();
             entity.Property(e => e.Status).HasConversion<string>();
@@ -45,6 +46,9 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.LastName).HasMaxLength(100);
             entity.Property(e => e.GoogleId).HasMaxLength(100).IsRequired();
             entity.Property(e => e.ProfilePictureUrl).HasMaxLength(500);
+            entity.Property(e => e.ResumeUploadHistory).HasColumnType("jsonb");
+            entity.Property(e => e.DetectedField).HasMaxLength(200);
+            entity.Property(e => e.ResumeLanguage).HasMaxLength(10);
         });
 
         // UserSession configuration (authentication sessions)
@@ -80,6 +84,7 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.Difficulty).HasMaxLength(20).IsRequired();
             entity.Property(e => e.Notes).HasColumnType("text");
             entity.Property(e => e.Transcript).HasColumnType("text");
+            entity.Property(e => e.SpeechAnalysis).HasColumnType("jsonb");
             
             entity.HasOne(e => e.User)
                 .WithMany()
@@ -114,6 +119,9 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.Question).HasColumnType("text").IsRequired();
             entity.Property(e => e.Category).HasMaxLength(100).IsRequired();
             entity.Property(e => e.Difficulty).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(e => e.Language).HasMaxLength(10).HasDefaultValue("en");
+            entity.HasIndex(e => e.Language);
+            entity.HasIndex(e => e.Category);
 
             entity.HasOne(e => e.User)
                 .WithMany()

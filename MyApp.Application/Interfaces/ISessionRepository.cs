@@ -12,5 +12,6 @@ public interface ISessionRepository
     Task<Session> AddAsync(Session session, CancellationToken cancellationToken = default);
     Task UpdateAsync(Session session, CancellationToken cancellationToken = default);
     Task<bool> DeleteByIdAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<int> CountAiAnalysesTodayAsync(Guid userId, CancellationToken cancellationToken = default);
     Task SaveChangesAsync(CancellationToken cancellationToken = default);
 }

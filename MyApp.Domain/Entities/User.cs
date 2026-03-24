@@ -20,6 +20,9 @@ public class User
     public string? ProfilePictureUrl { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime LastLoginAt { get; private set; }
+    public List<DateTime> ResumeUploadHistory { get; private set; } = [];
+    public string? DetectedField { get; private set; }
+    public string? ResumeLanguage { get; private set; }
 
     // EF Core requires a parameterless constructor
     private User() { }
@@ -87,6 +90,30 @@ public class User
     public void RecordLogin()
     {
         LastLoginAt = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Records a resume upload timestamp.
+    /// </summary>
+    public void RecordResumeUpload()
+    {
+        ResumeUploadHistory.Add(DateTime.UtcNow);
+    }
+
+    /// <summary>
+    /// Sets the detected professional field from resume analysis.
+    /// </summary>
+    public void SetDetectedField(string? field)
+    {
+        DetectedField = string.IsNullOrWhiteSpace(field) ? null : field.Trim();
+    }
+
+    /// <summary>
+    /// Sets the detected language of the resume.
+    /// </summary>
+    public void SetResumeLanguage(string? language)
+    {
+        ResumeLanguage = string.IsNullOrWhiteSpace(language) ? null : language.Trim().ToLowerInvariant();
     }
 
     /// <summary>

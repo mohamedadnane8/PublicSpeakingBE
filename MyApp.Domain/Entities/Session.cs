@@ -15,6 +15,7 @@ public class Session
 
     // Session Configuration
     public SessionMode Mode { get; private set; }
+    public SessionType Type { get; private set; }
     public SessionLanguage Language { get; private set; }
     public SessionDifficulty Difficulty { get; private set; }
     public string Word { get; private set; } = null!;
@@ -27,7 +28,7 @@ public class Session
     public SessionStatus Status { get; private set; }
     public CancelReason? CancelReason { get; private set; }
 
-    // Self-Ratings (1-5 scale)
+    // === General Speech Ratings (1-5 scale) ===
     public int? RatingOpening { get; private set; }
     public int? RatingStructure { get; private set; }
     public int? RatingEnding { get; private set; }
@@ -35,9 +36,15 @@ public class Session
     public int? RatingClarity { get; private set; }
     public int? RatingAuthenticity { get; private set; }
     public int? RatingLanguageExpression { get; private set; }
+    public int? RatingPassion { get; private set; } // 5% bonus
 
-    // Calculated Score
-    public decimal? OverallScore { get; private set; }
+    // === Interview Speech Ratings (1-5 scale, STAR framework) ===
+    public int? RatingRelevance { get; private set; }
+    public int? RatingSituationStakes { get; private set; }
+    public int? RatingAction { get; private set; }
+    public int? RatingResultImpact { get; private set; }
+    public int? RatingDeliveryComposure { get; private set; }
+    public int? RatingConciseness { get; private set; }
 
     // Notes
     public string? Notes { get; private set; }
@@ -55,11 +62,17 @@ public class Session
 
     // Transcript
     public string? Transcript { get; private set; }
+    public string? TranscriptionStatus { get; private set; }
+    public string? TranscriptionError { get; private set; }
+
+    // Speech Analysis (stored as JSON)
+    public string? SpeechAnalysis { get; private set; }
+    public DateTime? AnalyzedAt { get; private set; }
+    public bool AiScored { get; private set; }
 
     // Navigation property
     public User User { get; private set; } = null!;
 
-    // EF Core requires a parameterless constructor
     private Session() { }
 
     public static Session Create(
@@ -71,20 +84,17 @@ public class Session
         SessionDifficulty difficulty,
         string word,
         int thinkSeconds,
-        int speakSeconds)
+        int speakSeconds,
+        SessionType type = SessionType.General)
     {
         if (id == Guid.Empty)
             throw new ArgumentException("Id is required", nameof(id));
-        
         if (userId == Guid.Empty)
             throw new ArgumentException("UserId is required", nameof(userId));
-        
         if (string.IsNullOrWhiteSpace(word))
             throw new ArgumentException("Word is required", nameof(word));
-        
         if (thinkSeconds <= 0)
             throw new ArgumentException("Think seconds must be positive", nameof(thinkSeconds));
-        
         if (speakSeconds <= 0)
             throw new ArgumentException("Speak seconds must be positive", nameof(speakSeconds));
 
@@ -99,33 +109,27 @@ public class Session
             Word = word,
             ThinkSeconds = thinkSeconds,
             SpeakSeconds = speakSeconds,
-            Status = SessionStatus.Completed // Default, will be updated
+            Type = type,
+            Status = SessionStatus.Completed
         };
     }
 
     public void SetStatus(SessionStatus status, CancelReason? cancelReason = null)
     {
         Status = status;
-        
         if (status != SessionStatus.Completed && cancelReason.HasValue)
-        {
             CancelReason = cancelReason;
-        }
     }
 
-    public void SetCompletedAt(DateTime completedAt)
-    {
-        CompletedAt = completedAt;
-    }
+    public void SetCompletedAt(DateTime completedAt) => CompletedAt = completedAt;
 
-    public void SetRatings(
-        int? opening,
-        int? structure,
-        int? ending,
-        int? confidence,
-        int? clarity,
-        int? authenticity,
-        int? languageExpression)
+    /// <summary>
+    /// Set General Speech ratings (7 criteria + Passion bonus).
+    /// </summary>
+    public void SetGeneralRatings(
+        int? opening, int? structure, int? ending,
+        int? confidence, int? clarity, int? authenticity,
+        int? languageExpression, int? passion = null)
     {
         ValidateRating(opening, nameof(opening));
         ValidateRating(structure, nameof(structure));
@@ -134,6 +138,7 @@ public class Session
         ValidateRating(clarity, nameof(clarity));
         ValidateRating(authenticity, nameof(authenticity));
         ValidateRating(languageExpression, nameof(languageExpression));
+        ValidateRating(passion, nameof(passion));
 
         RatingOpening = opening;
         RatingStructure = structure;
@@ -142,30 +147,47 @@ public class Session
         RatingClarity = clarity;
         RatingAuthenticity = authenticity;
         RatingLanguageExpression = languageExpression;
+        RatingPassion = passion;
     }
 
-    public void SetOverallScore(decimal? score)
+    /// <summary>
+    /// Set Interview Speech ratings (STAR framework, 6 criteria).
+    /// </summary>
+    public void SetInterviewRatings(
+        int? relevance, int? situationStakes, int? action,
+        int? resultImpact, int? deliveryComposure, int? conciseness)
     {
-        if (score.HasValue && (score < 0 || score > 10))
-            throw new ArgumentException("Overall score must be between 0 and 10", nameof(score));
-        
-        OverallScore = score;
+        ValidateRating(relevance, nameof(relevance));
+        ValidateRating(situationStakes, nameof(situationStakes));
+        ValidateRating(action, nameof(action));
+        ValidateRating(resultImpact, nameof(resultImpact));
+        ValidateRating(deliveryComposure, nameof(deliveryComposure));
+        ValidateRating(conciseness, nameof(conciseness));
+
+        RatingRelevance = relevance;
+        RatingSituationStakes = situationStakes;
+        RatingAction = action;
+        RatingResultImpact = resultImpact;
+        RatingDeliveryComposure = deliveryComposure;
+        RatingConciseness = conciseness;
     }
 
-    public void SetNotes(string? notes)
+    /// <summary>Backward compat for existing callers.</summary>
+    public void SetRatings(
+        int? opening, int? structure, int? ending,
+        int? confidence, int? clarity, int? authenticity,
+        int? languageExpression)
     {
-        Notes = notes;
+        SetGeneralRatings(opening, structure, ending, confidence, clarity, authenticity, languageExpression);
     }
+
+    public void SetNotes(string? notes) => Notes = notes;
 
     public void SetAudioMetadata(
-        bool available,
-        int? durationMs = null,
-        DateTime? recordingStartedAt = null,
-        DateTime? recordingEndedAt = null,
-        AudioErrorCode? errorCode = null,
-        string? objectKey = null,
-        string? bucketName = null,
-        string? region = null,
+        bool available, int? durationMs = null,
+        DateTime? recordingStartedAt = null, DateTime? recordingEndedAt = null,
+        AudioErrorCode? errorCode = null, string? objectKey = null,
+        string? bucketName = null, string? region = null,
         DateTime? uploadedAt = null)
     {
         AudioAvailable = available;
@@ -179,9 +201,19 @@ public class Session
         AudioUploadedAt = uploadedAt;
     }
 
-    public void SetTranscript(string? transcript)
+    public void SetTranscript(string? transcript) => Transcript = transcript;
+
+    public void SetTranscriptionStatus(string? status, string? error = null)
     {
-        Transcript = transcript;
+        TranscriptionStatus = status;
+        TranscriptionError = error;
+    }
+
+    public void SetSpeechAnalysis(string analysisJson)
+    {
+        SpeechAnalysis = analysisJson;
+        AnalyzedAt = DateTime.UtcNow;
+        AiScored = true;
     }
 
     private static void ValidateRating(int? rating, string name)

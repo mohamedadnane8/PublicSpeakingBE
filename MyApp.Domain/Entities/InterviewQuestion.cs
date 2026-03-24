@@ -11,6 +11,7 @@ public class InterviewQuestion
     public QuestionDifficulty Difficulty { get; private set; }
     public int ThinkingSeconds { get; private set; }
     public int AnsweringSeconds { get; private set; }
+    public string Language { get; private set; } = "en";
     public DateTime CreatedAt { get; private set; }
 
     public User User { get; private set; } = null!;
@@ -23,7 +24,8 @@ public class InterviewQuestion
         string category,
         QuestionDifficulty difficulty,
         int thinkingSeconds,
-        int answeringSeconds)
+        int answeringSeconds,
+        string language = "en")
     {
         if (userId == Guid.Empty)
             throw new ArgumentException("UserId is required", nameof(userId));
@@ -51,6 +53,7 @@ public class InterviewQuestion
             Difficulty = difficulty,
             ThinkingSeconds = thinkingSeconds,
             AnsweringSeconds = answeringSeconds,
+            Language = string.IsNullOrWhiteSpace(language) ? "en" : language.Trim().ToLowerInvariant(),
             CreatedAt = DateTime.UtcNow
         };
     }

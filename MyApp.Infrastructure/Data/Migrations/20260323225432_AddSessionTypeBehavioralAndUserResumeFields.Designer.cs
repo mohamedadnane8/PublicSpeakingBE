@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using MyApp.Infrastructure.Data;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace MyApp.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260323225432_AddSessionTypeBehavioralAndUserResumeFields")]
+    partial class AddSessionTypeBehavioralAndUserResumeFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -112,12 +115,6 @@ namespace MyApp.Infrastructure.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<bool>("AiScored")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime?>("AnalyzedAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<bool>("AudioAvailable")
                         .HasColumnType("boolean");
 
@@ -171,8 +168,8 @@ namespace MyApp.Infrastructure.Data.Migrations
                     b.Property<string>("Notes")
                         .HasColumnType("text");
 
-                    b.Property<int?>("RatingAction")
-                        .HasColumnType("integer");
+                    b.Property<decimal?>("OverallScore")
+                        .HasColumnType("numeric");
 
                     b.Property<int?>("RatingAuthenticity")
                         .HasColumnType("integer");
@@ -180,13 +177,7 @@ namespace MyApp.Infrastructure.Data.Migrations
                     b.Property<int?>("RatingClarity")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("RatingConciseness")
-                        .HasColumnType("integer");
-
                     b.Property<int?>("RatingConfidence")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("RatingDeliveryComposure")
                         .HasColumnType("integer");
 
                     b.Property<int?>("RatingEnding")
@@ -198,26 +189,11 @@ namespace MyApp.Infrastructure.Data.Migrations
                     b.Property<int?>("RatingOpening")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("RatingPassion")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("RatingRelevance")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("RatingResultImpact")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("RatingSituationStakes")
-                        .HasColumnType("integer");
-
                     b.Property<int?>("RatingStructure")
                         .HasColumnType("integer");
 
                     b.Property<int>("SpeakSeconds")
                         .HasColumnType("integer");
-
-                    b.Property<string>("SpeechAnalysis")
-                        .HasColumnType("jsonb");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -227,12 +203,6 @@ namespace MyApp.Infrastructure.Data.Migrations
                         .HasColumnType("integer");
 
                     b.Property<string>("Transcript")
-                        .HasColumnType("text");
-
-                    b.Property<string>("TranscriptionError")
-                        .HasColumnType("text");
-
-                    b.Property<string>("TranscriptionStatus")
                         .HasColumnType("text");
 
                     b.Property<string>("Type")
