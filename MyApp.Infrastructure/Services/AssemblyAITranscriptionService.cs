@@ -132,7 +132,7 @@ public class AssemblyAITranscriptionService : ITranscriptionService
         {
             ["audio_url"] = audioUrl,
             ["disfluencies"] = true,
-            ["speech_models"] = new[] { "universal-3-pro" }
+            ["speech_models"] = new[] { "universal-3-pro", "universal-2" }
         };
 
         if (!string.IsNullOrWhiteSpace(languageCode))
