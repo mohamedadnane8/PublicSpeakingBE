@@ -472,10 +472,17 @@ public class SessionService : ISessionService
         _logger = logger;
     }
 
-    public async Task<SessionDto> CreateSessionAsync(
-        Guid userId, 
-        CreateSessionRequest request, 
+    public Task<SessionDto> CreateSessionAsync(
+        Guid userId,
+        CreateSessionRequest request,
         CancellationToken cancellationToken = default)
+        => CreateSessionInternalAsync(userId, request, cancellationToken, skipBackgroundTranscription: false);
+
+    private async Task<SessionDto> CreateSessionInternalAsync(
+        Guid userId,
+        CreateSessionRequest request,
+        CancellationToken cancellationToken,
+        bool skipBackgroundTranscription)
     {
         // Parse enums
         var mode = ParseEnum<SessionMode>(request.Mode);
@@ -569,7 +576,9 @@ public class SessionService : ISessionService
             session.Id, userId, sessionType, mode, status);
 
         // Trigger server-side transcription if audio is available and no client transcript was provided
-        if (session.AudioAvailable
+        // Skip if caller will trigger transcription separately (e.g. CreateSessionWithAudioAsync)
+        if (!skipBackgroundTranscription
+            && session.AudioAvailable
             && !string.IsNullOrWhiteSpace(session.AudioObjectKey)
             && string.IsNullOrWhiteSpace(request.Transcript))
         {
@@ -647,82 +656,17 @@ public class SessionService : ISessionService
         long fileSize,
         CancellationToken cancellationToken = default)
     {
-        // Buffer audio so we can use it for both S3 upload and transcription
-        var buffer = new MemoryStream();
-        await audioStream.CopyToAsync(buffer, cancellationToken);
-
         _logger.LogInformation(
             "Creating session with audio for user {UserId} (file={FileName}, contentType={ContentType}, size={Size})",
             userId, fileName, contentType, fileSize);
 
-        // Determine language code for transcription
-        string? langCode = null;
-        var sessionType = string.IsNullOrWhiteSpace(request.Type)
-            ? SessionType.General
-            : ParseEnum<SessionType>(request.Type);
-
-        if (sessionType == SessionType.Interview)
-        {
-            var user = await _userRepository.GetByIdAsync(userId, cancellationToken);
-            langCode = user?.ResumeLanguage;
-        }
-        else
-        {
-            var language = ParseEnum<SessionLanguage>(request.Language);
-            langCode = language switch
-            {
-                SessionLanguage.En => "en",
-                SessionLanguage.Fr => "fr",
-                SessionLanguage.Ar => "ar",
-                _ => null
-            };
-        }
-
-        // Run S3 upload and Deepgram transcription in parallel
-        buffer.Position = 0;
-        var s3Stream = new MemoryStream(buffer.GetBuffer(), 0, (int)buffer.Length, writable: false);
-
-        buffer.Position = 0;
-        var transcriptionStream = new MemoryStream(buffer.GetBuffer(), 0, (int)buffer.Length, writable: false);
-
-        _logger.LogInformation("Starting parallel S3 upload + transcription for user {UserId}", userId);
-
-        var s3Task = _s3StorageService.UploadAudioAsync(
-            userId, s3Stream, fileName, contentType, fileSize, cancellationToken);
-
-        var transcribeTask = _transcriptionService.TranscribeAudioAsync(
-            transcriptionStream, contentType, langCode, cancellationToken);
-
-        // Wait for S3 upload (required) and transcription (best-effort) in parallel
-        // Transcription failure must NOT prevent session creation
-        try
-        {
-            await Task.WhenAll(s3Task, transcribeTask);
-        }
-        catch
-        {
-            // If transcription failed, ensure S3 upload still completed
-            await s3Task;
-        }
-
-        var s3Result = await s3Task;
-
-        string? transcript = null;
-        try
-        {
-            transcript = await transcribeTask;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex,
-                "Inline transcription failed for user {UserId}, session will be created without transcript. " +
-                "Background transcription will be triggered automatically",
-                userId);
-        }
+        // Upload to S3 only — transcription is a separate step
+        var s3Result = await _s3StorageService.UploadAudioAsync(
+            userId, audioStream, fileName, contentType, fileSize, cancellationToken);
 
         _logger.LogInformation(
-            "Parallel upload+transcription done for user {UserId}: s3Key={ObjectKey}, transcriptLength={TranscriptLength}",
-            userId, s3Result.ObjectKey, transcript?.Length ?? 0);
+            "S3 upload done for user {UserId}: s3Key={ObjectKey}",
+            userId, s3Result.ObjectKey);
 
         // Set audio metadata on the request so CreateSessionAsync stores it
         request.Audio = new SessionAudioDto
@@ -738,10 +682,95 @@ public class SessionService : ISessionService
             ErrorCode = null
         };
 
-        // Set transcript so CreateSessionAsync stores it (and skips background transcription)
-        request.Transcript = transcript;
+        // No transcript yet — background transcription will be triggered separately via POST /sessions/{id}/transcribe
+        // Do NOT set request.Transcript so CreateSessionAsync skips inline transcription
+        // but also do NOT trigger background transcription automatically (the frontend will call /transcribe)
+        request.Transcript = null;
 
-        return await CreateSessionAsync(userId, request, cancellationToken);
+        return await CreateSessionInternalAsync(userId, request, cancellationToken, skipBackgroundTranscription: true);
+    }
+
+    /// <summary>
+    /// Trigger transcription for an existing session. Downloads audio from S3 and sends to Deepgram.
+    /// Runs in the background — returns immediately.
+    /// </summary>
+    public async Task<bool> TriggerTranscriptionAsync(
+        Guid sessionId,
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        var session = await _sessionRepository.GetByIdAsync(sessionId, cancellationToken);
+        if (session == null || session.UserId != userId)
+            return false;
+
+        if (!session.AudioAvailable || string.IsNullOrWhiteSpace(session.AudioObjectKey))
+            return false;
+
+        // Already transcribed or in progress
+        if (session.TranscriptionStatus == "Completed" || session.TranscriptionStatus == "Pending")
+            return true;
+
+        // Determine language code
+        string? langCode = null;
+        if (session.Type == SessionType.Interview)
+        {
+            var user = await _userRepository.GetByIdAsync(userId, cancellationToken);
+            langCode = user?.ResumeLanguage;
+        }
+        else
+        {
+            langCode = session.Language switch
+            {
+                SessionLanguage.En => "en",
+                SessionLanguage.Fr => "fr",
+                SessionLanguage.Ar => "ar",
+                _ => null
+            };
+        }
+
+        session.SetTranscriptionStatus("Pending");
+        await _sessionRepository.UpdateAsync(session, cancellationToken);
+        await _sessionRepository.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("Queuing transcription for session {SessionId} via /transcribe endpoint (lang={Language})",
+            session.Id, langCode ?? "auto");
+
+        var audioKey = session.AudioObjectKey;
+        var sid = session.Id;
+        var lang = langCode;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var transcriptionService = scope.ServiceProvider.GetRequiredService<ITranscriptionService>();
+                var sessionRepo = scope.ServiceProvider.GetRequiredService<ISessionRepository>();
+                var bgLogger = scope.ServiceProvider.GetRequiredService<ILogger<SessionService>>();
+
+                bgLogger.LogInformation("Starting transcription for session {SessionId}", sid);
+                await transcriptionService.TranscribeSessionAsync(sid, audioKey, lang);
+
+                var updated = await sessionRepo.GetByIdAsync(sid);
+                if (updated?.TranscriptionStatus == "Completed")
+                {
+                    bgLogger.LogInformation("Transcription completed for session {SessionId} ({Length} chars)",
+                        sid, updated.Transcript?.Length ?? 0);
+                }
+                else
+                {
+                    bgLogger.LogWarning("Transcription finished with status {Status} for session {SessionId}: {Error}",
+                        updated?.TranscriptionStatus ?? "Unknown", sid, updated?.TranscriptionError ?? "no details");
+                }
+            }
+            catch (Exception ex)
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var bgLogger = scope.ServiceProvider.GetRequiredService<ILogger<SessionService>>();
+                bgLogger.LogError(ex, "Background transcription failed for session {SessionId}", sid);
+            }
+        });
+
+        return true;
     }
 
     public async Task<SessionDto?> UpdateSessionAsync(
