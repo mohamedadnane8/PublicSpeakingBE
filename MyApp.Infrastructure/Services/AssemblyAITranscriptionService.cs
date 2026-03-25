@@ -65,8 +65,18 @@ public class AssemblyAITranscriptionService : ITranscriptionService
 
         try
         {
+            // Load session once — reuse the tracked entity throughout
+            var session = await _sessionRepository.GetByIdAsync(sessionId, cancellationToken);
+            if (session == null)
+            {
+                _logger.LogWarning("Session {SessionId} not found. Skipping transcription.", sessionId);
+                return;
+            }
+
             // Update status to Processing
-            await UpdateSessionTranscriptionStatusAsync(sessionId, "Processing", null, cancellationToken);
+            session.SetTranscriptionStatus("Processing");
+            await _sessionRepository.UpdateAsync(session, cancellationToken);
+            await _sessionRepository.SaveChangesAsync(cancellationToken);
 
             // 1. Generate pre-signed S3 URL for AssemblyAI to download
             var audioUrl = await _s3StorageService.GetPreSignedGetUrlAsync(
@@ -84,14 +94,7 @@ public class AssemblyAITranscriptionService : ITranscriptionService
             // 3. Poll for completion
             var result = await PollForCompletionAsync(transcriptId, cancellationToken);
 
-            // 4. Store result on session (fresh load to avoid tracking conflicts)
-            var session = await _sessionRepository.GetByIdAsync(sessionId, cancellationToken);
-            if (session == null)
-            {
-                _logger.LogWarning("Session {SessionId} not found after transcription completed.", sessionId);
-                return;
-            }
-
+            // 4. Store result on the same tracked entity
             if (result.Status == "completed")
             {
                 session.SetTranscript(result.Text);
