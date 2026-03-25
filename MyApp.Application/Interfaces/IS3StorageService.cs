@@ -16,4 +16,12 @@ public interface IS3StorageService
         string objectKey,
         TimeSpan expiresIn,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Download a file from S3 and return the stream with its content type.
+    /// Caller is responsible for disposing the stream.
+    /// </summary>
+    Task<(Stream Stream, string ContentType, long ContentLength)> DownloadAsync(
+        string objectKey,
+        CancellationToken cancellationToken = default);
 }

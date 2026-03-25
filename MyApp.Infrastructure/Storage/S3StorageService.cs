@@ -74,9 +74,10 @@ public class S3StorageService : IS3StorageService
         };
 
         _logger.LogInformation(
-            "Uploading audio to S3. Bucket: {Bucket}, Key: {Key}, Size: {Size}",
+            "Uploading audio to S3. Bucket: {Bucket}, Key: {Key}, ContentType: {ContentType}, Size: {Size}",
             _options.BucketName,
             objectKey,
+            safeContentType,
             fileSize);
 
         await _s3Client.PutObjectAsync(putRequest, cancellationToken);
@@ -113,6 +114,29 @@ public class S3StorageService : IS3StorageService
 
         var url = _s3Client.GetPreSignedURL(request);
         return Task.FromResult(url);
+    }
+
+    public async Task<(Stream Stream, string ContentType, long ContentLength)> DownloadAsync(
+        string objectKey,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(objectKey))
+            throw new ArgumentException("Object key is required.", nameof(objectKey));
+
+        var request = new GetObjectRequest
+        {
+            BucketName = _options.BucketName,
+            Key = objectKey.Trim()
+        };
+
+        var response = await _s3Client.GetObjectAsync(request, cancellationToken);
+        var contentType = response.Headers.ContentType ?? "application/octet-stream";
+        var contentLength = response.ContentLength;
+
+        _logger.LogInformation("Downloaded from S3: {Key} (contentType={ContentType}, size={Size})",
+            objectKey, contentType, contentLength);
+
+        return (response.ResponseStream, contentType, contentLength);
     }
 
     private static string BuildObjectKey(Guid userId, string originalFileName)

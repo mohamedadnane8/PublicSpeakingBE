@@ -127,5 +127,19 @@ public class SessionDto
     public bool AiScored { get; set; }
 }
 
+/// <summary>
+/// Request DTO for updating an existing session (ratings, notes, status).
+/// Only non-null fields are applied.
+/// </summary>
+public class UpdateSessionRequest
+{
+    public string? Status { get; set; }
+    public string? CancelReason { get; set; }
+    public DateTime? CompletedAt { get; set; }
+    public GeneralRatingsDto? Ratings { get; set; }
+    public InterviewRatingsDto? InterviewRatings { get; set; }
+    public string? Notes { get; set; }
+}
+
 // Backward compat alias
 public class SessionRatingsDto : GeneralRatingsDto { }
