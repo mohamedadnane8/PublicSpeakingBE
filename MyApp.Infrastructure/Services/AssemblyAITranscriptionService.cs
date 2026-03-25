@@ -40,6 +40,15 @@ public class AssemblyAITranscriptionService : ITranscriptionService
         _logger = logger;
     }
 
+    public Task<string?> TranscribeAudioAsync(
+        Stream audioStream,
+        string contentType,
+        string? languageCode,
+        CancellationToken cancellationToken = default)
+    {
+        throw new NotSupportedException("AssemblyAI does not support direct audio stream transcription. Use TranscribeSessionAsync instead.");
+    }
+
     public async Task TranscribeSessionAsync(
         Guid sessionId,
         string audioObjectKey,
@@ -122,7 +131,8 @@ public class AssemblyAITranscriptionService : ITranscriptionService
         var requestBody = new Dictionary<string, object>
         {
             ["audio_url"] = audioUrl,
-            ["disfluencies"] = true
+            ["disfluencies"] = true,
+            ["speech_models"] = new[] { "universal-3-pro" }
         };
 
         if (!string.IsNullOrWhiteSpace(languageCode))
