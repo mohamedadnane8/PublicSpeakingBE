@@ -10,7 +10,24 @@ namespace MyApp.Infrastructure.Storage;
 
 public class S3StorageService : IS3StorageService
 {
-    private static readonly Regex InvalidFileNameChars = new(@"[^a-zA-Z0-9\-_]+", RegexOptions.Compiled);
+    private static readonly Regex InvalidExtensionChars = new(@"[^a-zA-Z0-9]+", RegexOptions.Compiled);
+
+    private static readonly IReadOnlyDictionary<string, string> ExtensionByContentType =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["audio/mpeg"] = ".mp3",
+            ["audio/mp3"] = ".mp3",
+            ["audio/wav"] = ".wav",
+            ["audio/x-wav"] = ".wav",
+            ["audio/wave"] = ".wav",
+            ["audio/vnd.wave"] = ".wav",
+            ["audio/mp4"] = ".m4a",
+            ["audio/x-m4a"] = ".m4a",
+            ["audio/m4a"] = ".m4a",
+            ["audio/webm"] = ".webm",
+            ["audio/ogg"] = ".ogg",
+            ["audio/opus"] = ".ogg"
+        };
 
     private readonly IAmazonS3 _s3Client;
     private readonly ILogger<S3StorageService> _logger;
@@ -59,10 +76,10 @@ public class S3StorageService : IS3StorageService
         if (string.IsNullOrWhiteSpace(originalFileName))
             throw new ArgumentException("Original file name is required.", nameof(originalFileName));
 
-        var objectKey = BuildObjectKey(userId, originalFileName);
         var safeContentType = string.IsNullOrWhiteSpace(contentType)
             ? "application/octet-stream"
             : contentType.Trim();
+        var objectKey = BuildObjectKey(userId, originalFileName, safeContentType);
 
         var putRequest = new PutObjectRequest
         {
@@ -139,25 +156,41 @@ public class S3StorageService : IS3StorageService
         return (response.ResponseStream, contentType, contentLength);
     }
 
-    private static string BuildObjectKey(Guid userId, string originalFileName)
+    private static string BuildObjectKey(Guid userId, string originalFileName, string contentType)
     {
-        var extension = Path.GetExtension(originalFileName)?.ToLowerInvariant() ?? string.Empty;
-        var baseFileName = Path.GetFileNameWithoutExtension(originalFileName);
-
-        var sanitizedBaseName = InvalidFileNameChars.Replace(baseFileName, "-").Trim('-');
-        if (string.IsNullOrWhiteSpace(sanitizedBaseName))
-        {
-            sanitizedBaseName = "audio";
-        }
-
-        if (sanitizedBaseName.Length > 80)
-        {
-            sanitizedBaseName = sanitizedBaseName[..80];
-        }
-
+        var extension = ResolveExtension(originalFileName, contentType);
         var now = DateTime.UtcNow;
         var id = Guid.NewGuid().ToString("N");
 
-        return $"audio/{userId}/{now:yyyy}/{now:MM}/{id}-{sanitizedBaseName}{extension}";
+        // Keep key short and deterministic to avoid DB column-size issues in older environments.
+        return $"audio/{userId:N}/{now:yyyy}/{now:MM}/{id}{extension}";
+    }
+
+    private static string ResolveExtension(string originalFileName, string contentType)
+    {
+        var normalizedContentType = contentType.Split(';', 2)[0].Trim();
+        if (ExtensionByContentType.TryGetValue(normalizedContentType, out var mappedExtension))
+        {
+            return mappedExtension;
+        }
+
+        var rawExtension = Path.GetExtension(originalFileName)?.Trim().TrimStart('.');
+        if (string.IsNullOrWhiteSpace(rawExtension))
+        {
+            return ".bin";
+        }
+
+        var sanitized = InvalidExtensionChars.Replace(rawExtension, string.Empty).ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(sanitized))
+        {
+            return ".bin";
+        }
+
+        if (sanitized.Length > 10)
+        {
+            sanitized = sanitized[..10];
+        }
+
+        return $".{sanitized}";
     }
 }

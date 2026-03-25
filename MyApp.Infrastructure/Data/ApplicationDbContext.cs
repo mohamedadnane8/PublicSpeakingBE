@@ -84,6 +84,7 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.Difficulty).HasMaxLength(20).IsRequired();
             entity.Property(e => e.Notes).HasColumnType("text");
             entity.Property(e => e.Transcript).HasColumnType("text");
+            entity.Property(e => e.AudioObjectKey).HasColumnType("text");
             entity.Property(e => e.SpeechAnalysis).HasColumnType("jsonb");
             
             entity.HasOne(e => e.User)
